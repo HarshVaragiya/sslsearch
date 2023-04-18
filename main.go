@@ -231,6 +231,7 @@ func main() {
 	}
 
 	// start scanning
+	startTime := time.Now()
 	log.WithFields(log.Fields{"state": "main"}).Info("starting scanner threads")
 	scanWg := &sync.WaitGroup{}
 	scanWg.Add(*threadCount)
@@ -247,20 +248,24 @@ func main() {
 	// wait for everything to finish!
 	log.WithFields(log.Fields{"state": "main"}).Info("waiting for threads to finish scanning")
 	scanWg.Wait()
+	stopTime := time.Now()
 	close(resultChan)
 	log.WithFields(log.Fields{"state": "main"}).Info("saving results to disk")
 	resultWg.Wait()
 	log.WithFields(log.Fields{"state": "main"}).Info("done writing results to disk. exiting.")
-	Summarize()
+	Summarize(startTime, stopTime)
 }
 
-func Summarize() {
+func Summarize(start, stop time.Time) {
 	statsLock.Lock()
 	defer statsLock.Unlock()
+	elapsedTime := stop.Sub(start)
 	percentage := float64(totalIpsScanned) / TOTAL_IPv4_ADDR_COUNT
-	fmt.Printf("Total IPs Scanned: %v (%v %% of the public internet)\n", totalIpsScanned, percentage)
-	fmt.Printf("Total Findings   : %v \n", totalFindings)
-	fmt.Printf("Total CIDR ranges Scanned : %v \n", cidrRangesScanned)
+	fmt.Printf("Total IPs Scanned			: %v (%v %% of the public internet)\n", totalIpsScanned, percentage)
+	fmt.Printf("Total Findings   			: %v \n", totalFindings)
+	fmt.Printf("Total CIDR ranges Scanned 	: %v \n", cidrRangesScanned)
+	fmt.Printf("Time Elapsed 				: %v \n", elapsedTime)
+	fmt.Printf("Scan Speed 					: %v IPs/second", (1000000000*totalIpsScanned)/int(elapsedTime))
 }
 
 func SaveResultsToDisk(resultChan chan *CertResult, resultWg *sync.WaitGroup, outFile *os.File) {
