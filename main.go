@@ -13,7 +13,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/seancfoley/ipaddress-go/ipaddr"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -117,23 +116,6 @@ func ScanRemote(remote string, keywordRegex *regexp.Regexp) (*CertResult, error)
 		}, nil
 	}
 	return nil, errNoMatch
-}
-
-func SplitCIDR(cidrString string, suffixLenPerGoRoutine int, cidrChan chan string) error {
-	cidr := ipaddr.NewIPAddressString(cidrString).GetAddress()
-	cidrRange := cidr.GetPrefixLen().Len()
-	adjustPrefixLength := 32 - cidrRange - suffixLenPerGoRoutine
-	if adjustPrefixLength < 0 {
-		adjustPrefixLength = 0
-	}
-	for i := cidr.AdjustPrefixLen(adjustPrefixLength).PrefixBlockIterator(); i.HasNext(); {
-		nextCidr := i.Next().String()
-		cidrChan <- nextCidr
-		statsLock.Lock()
-		cidrRangesToScan += 1
-		statsLock.Unlock()
-	}
-	return nil
 }
 
 func main() {
@@ -265,7 +247,7 @@ func Summarize(start, stop time.Time) {
 	fmt.Printf("Total Findings   			: %v \n", totalFindings)
 	fmt.Printf("Total CIDR ranges Scanned 	: %v \n", cidrRangesScanned)
 	fmt.Printf("Time Elapsed 				: %v \n", elapsedTime)
-	fmt.Printf("Scan Speed 					: %v IPs/second", (1000000000*totalIpsScanned)/int(elapsedTime))
+	fmt.Printf("Scan Speed 					: %v IPs/second \n", (1000000000*totalIpsScanned)/int(elapsedTime))
 }
 
 func SaveResultsToDisk(resultChan chan *CertResult, resultWg *sync.WaitGroup, outFile *os.File) {
