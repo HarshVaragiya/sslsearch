@@ -1,0 +1,4 @@
+bin/
+*.log
+*.json
+*.csv
