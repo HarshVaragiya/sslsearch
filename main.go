@@ -17,6 +17,7 @@ import (
 	"time"
 
 	logrus "github.com/sirupsen/logrus"
+	"github.com/valyala/fasthttp"
 )
 
 const (
@@ -24,14 +25,28 @@ const (
 )
 
 var (
-	log               = logrus.New()
-	statsLock         = sync.RWMutex{}
-	cidrRangesToScan  = 0
-	cidrRangesScanned = 0
-	totalIpsScanned   = 0
-	totalFindings     = 0
+	log                = logrus.New()
+	statsLock          = sync.RWMutex{}
+	cidrRangesToScan   = 0
+	cidrRangesScanned  = 0
+	totalIpsScanned    = 0
+	totalFindings      = 0
+	jarmRetryCount     = 3
+	jarmDefaultBackoff = time.Second * 2
+	jarmDeadlines      = time.Second * 5
 
 	tcpTimeout = 10
+
+	httpClientPool = sync.Pool{
+		New: func() interface{} {
+			return &fasthttp.Client{
+				TLSConfig: &tls.Config{
+					// for server header check skip SSL validation
+					InsecureSkipVerify: true,
+				},
+			}
+		},
+	}
 	dialerPool = sync.Pool{
 		New: func() interface{} {
 			return &net.Dialer{
@@ -46,10 +61,11 @@ var (
 			}
 		},
 	}
-	errConn         = fmt.Errorf("could not connect to remote host")
-	errNoTls        = fmt.Errorf("could not find TLS on remote port")
-	errNoMatch      = fmt.Errorf("certificate details did not match requirement")
-	errCtxCancelled = fmt.Errorf("parent context cancelled")
+	errConn              = fmt.Errorf("could not connect to remote host")
+	errNoTls             = fmt.Errorf("could not find TLS on remote port")
+	errNoMatch           = fmt.Errorf("certificate details did not match requirement")
+	errCtxCancelled      = fmt.Errorf("parent context cancelled")
+	errJarmNotCalculated = fmt.Errorf("error calculating JARM fingerprint")
 )
 
 func ScanCertificatesInCidr(ctx context.Context, cidrChan chan string, ports []string, resultChan chan *CertResult, wg *sync.WaitGroup, keywordRegexString string) {
@@ -146,9 +162,12 @@ func main() {
 	trace := flag.Bool("trace", false, "enable trace logs")
 	tcpTimeoutFlag := flag.Int("timeout", 10, "tcp connection timeout in seconds")
 
-	// enrichment flags
+	// advanced enrichment flags
 	grabServerHeader := flag.Bool("server-header", false, "attempt enrich results by grabbing the https server header for results")
-	enrichmentThreadCount := flag.Int("enrichment-threads", 10, "number of threads to use for result enrichment")
+	grabJarmFingerprint := flag.Bool("jarm", false, "attempt enrich results by grabbing the JARM fingerprint")
+	jarmRetryCountFlag := flag.Int("jarm-retry-count", 3, "retry attempts for JARM fingerprint (default 3)")
+	serverHeaderThreadCount := flag.Int("server-header-threads", 10, "number of threads to use for server header result enrichment")
+	jarmFingerptintThreadCount := flag.Int("jarm-threads", 50, "number of threads to use for JARM fingerprint enrichment")
 
 	flag.Parse()
 
@@ -186,6 +205,7 @@ func main() {
 	}
 
 	tcpTimeout = *tcpTimeoutFlag
+	jarmRetryCount = *jarmRetryCountFlag
 
 	// variables
 	ports := strings.Split(*portsString, ",")
@@ -270,7 +290,24 @@ func main() {
 	enrichWg := &sync.WaitGroup{}
 	enrichedResultChan = resultChan
 	if *grabServerHeader {
-		enrichedResultChan = ServerHeaderEnrichment(resultChan, *enrichmentThreadCount, enrichWg)
+		enrichWg.Add(1)
+		serverHeaderWg := &sync.WaitGroup{}
+		enrichedResultChan = ServerHeaderEnrichment(ctx, enrichedResultChan, *serverHeaderThreadCount, serverHeaderWg)
+		go func(enrichedResultChan chan *CertResult, wg *sync.WaitGroup) {
+			wg.Wait()
+			close(enrichedResultChan)
+			enrichWg.Done()
+		}(enrichedResultChan, serverHeaderWg)
+	}
+	if *grabJarmFingerprint {
+		enrichWg.Add(1)
+		jarmFingerprintWg := &sync.WaitGroup{}
+		enrichedResultChan = JARMFingerprintEnrichment(ctx, enrichedResultChan, *jarmFingerptintThreadCount, jarmFingerprintWg)
+		go func(enrichedResultChan chan *CertResult, wg *sync.WaitGroup) {
+			wg.Wait()
+			close(enrichedResultChan)
+			enrichWg.Done()
+		}(enrichedResultChan, jarmFingerprintWg)
 	}
 
 	// save results to disk
@@ -288,10 +325,11 @@ func main() {
 	// enrichment
 	log.WithFields(logrus.Fields{"state": "main"}).Info("waiting for enrichment threads to finish")
 	enrichWg.Wait()
-	if _, open := <-enrichedResultChan; open {
-		// close enrichment channel only if it is open
-		close(enrichedResultChan)
-	}
+	log.WithFields(logrus.Fields{"state": "main"}).Info("enrichment threads finished")
+	// if _, open := <-enrichedResultChan; open {
+	// 	// close enrichment channel only if it is open
+	// 	close(enrichedResultChan)
+	// }
 
 	// save results to disk
 	log.WithFields(logrus.Fields{"state": "main"}).Info("saving results to disk ...")
@@ -333,11 +371,20 @@ func PrintProgressToConsole(refreshInterval int) {
 	}
 }
 
-func ServerHeaderEnrichment(rawResultChan chan *CertResult, enrichmentThreads int, wg *sync.WaitGroup) chan *CertResult {
-	enrichedResultChan := make(chan *CertResult, 100)
+func ServerHeaderEnrichment(ctx context.Context, rawResultChan chan *CertResult, enrichmentThreads int, wg *sync.WaitGroup) chan *CertResult {
+	enrichedResultChan := make(chan *CertResult, 1000)
 	wg.Add(enrichmentThreads)
 	for i := 0; i < enrichmentThreads; i++ {
-		go ServerHeaderEnrichmentThread(rawResultChan, enrichedResultChan, wg)
+		go ServerHeaderEnrichmentThread(ctx, rawResultChan, enrichedResultChan, wg)
+	}
+	return enrichedResultChan
+}
+
+func JARMFingerprintEnrichment(ctx context.Context, rawResultChan chan *CertResult, enrichmentThreads int, wg *sync.WaitGroup) chan *CertResult {
+	enrichedResultChan := make(chan *CertResult, 1000)
+	wg.Add(enrichmentThreads)
+	for i := 0; i < enrichmentThreads; i++ {
+		go JarmFingerprintEnrichmentThread(ctx, rawResultChan, enrichedResultChan, wg)
 	}
 	return enrichedResultChan
 }
