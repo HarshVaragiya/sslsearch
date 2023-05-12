@@ -69,6 +69,7 @@ func ServerHeaderEnrichmentThread(ctx context.Context, rawResultChan, enrichedRe
 			rawResult.ServerHeader = header
 			log.WithFields(logrus.Fields{"state": "enrichment", "remote": rawResult.RemoteAddr}).Debugf("Server: %v", header)
 		} else {
+			rawResult.ServerHeader = header
 			log.WithFields(logrus.Fields{"state": "enrichment", "remote": rawResult.RemoteAddr, "errmsg": err.Error()}).Tracef("Server: %v ", header)
 		}
 		enrichedResultChan <- rawResult
@@ -84,6 +85,7 @@ func JarmFingerprintEnrichmentThread(ctx context.Context, rawResultChan, enriche
 			rawResult.JARM = jarmFingerprint
 			log.WithFields(logrus.Fields{"state": "enrichment", "remote": rawResult.RemoteAddr}).Debugf("JARM Fingerprint: %v", jarmFingerprint)
 		} else {
+			rawResult.JARM = jarmFingerprint
 			log.WithFields(logrus.Fields{"state": "enrichment", "remote": rawResult.RemoteAddr, "errmsg": err.Error()}).Tracef("JARM Fingerprint: %v ", jarmFingerprint)
 		}
 		enrichedResultChan <- rawResult

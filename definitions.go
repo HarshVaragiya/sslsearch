@@ -21,6 +21,6 @@ type CertResult struct {
 	Subject      string   `json:"subject"`
 	Issuer       string   `json:"issuer"`
 	SANs         []string `json:"SANs"`
-	ServerHeader string   `json:"server,omitempty"`
-	JARM         string   `json:"jarm,omitempty"`
+	ServerHeader string   `json:"server"`
+	JARM         string   `json:"jarm"`
 }

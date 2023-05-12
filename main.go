@@ -161,6 +161,7 @@ func main() {
 	debug := flag.Bool("debug", false, "enable debug logs")
 	trace := flag.Bool("trace", false, "enable trace logs")
 	tcpTimeoutFlag := flag.Int("timeout", 10, "tcp connection timeout in seconds")
+	consoleOut := flag.Bool("console-out", false, "prints result JSON to console for debugging")
 
 	// advanced enrichment flags
 	grabServerHeader := flag.Bool("server-header", false, "attempt enrich results by grabbing the https server header for results")
@@ -313,7 +314,7 @@ func main() {
 	// save results to disk
 	resultWg := &sync.WaitGroup{}
 	resultWg.Add(1)
-	go SaveResultsToDisk(enrichedResultChan, resultWg, outFile)
+	go SaveResultsToDisk(enrichedResultChan, resultWg, outFile, *consoleOut)
 	go PrintProgressToConsole(2000)
 
 	// wait for everything to finish!
@@ -351,14 +352,18 @@ func Summarize(start, stop time.Time) {
 	fmt.Printf("Scan Speed                  : %v IPs/second \n", (1000000000*totalIpsScanned)/int(elapsedTime))
 }
 
-func SaveResultsToDisk(resultChan chan *CertResult, resultWg *sync.WaitGroup, outFile *os.File) {
+func SaveResultsToDisk(resultChan chan *CertResult, resultWg *sync.WaitGroup, outFile *os.File, consoleout bool) {
 	defer resultWg.Done()
 	enc := json.NewEncoder(outFile)
 	for result := range resultChan {
 		if err := enc.Encode(result); err != nil {
 			log.WithFields(logrus.Fields{"state": "save", "subject": result.Subject, "SANs": fmt.Sprintf("%s", result.SANs)}).Error("error saving result to disk")
 		}
-		log.WithFields(logrus.Fields{"state": "save", "subject": result.Subject, "SANs": fmt.Sprintf("%s", result.SANs)}).Debug("")
+		if consoleout {
+			log.WithFields(logrus.Fields{"state": "save", "subject": result.Subject, "SANs": fmt.Sprintf("%s", result.SANs), "remote": result.RemoteAddr, "jarm": result.JARM, "server": result.ServerHeader}).Info()
+		} else {
+			log.WithFields(logrus.Fields{"state": "save", "subject": result.Subject, "SANs": fmt.Sprintf("%s", result.SANs), "remote": result.RemoteAddr, "jarm": result.JARM, "server": result.ServerHeader}).Debug()
+		}
 	}
 }
 
