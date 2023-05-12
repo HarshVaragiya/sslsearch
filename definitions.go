@@ -17,8 +17,9 @@ type CidrRangeInput interface {
 }
 
 type CertResult struct {
-	RemoteAddr string   `json:"remote"`
-	Subject    string   `json:"subject"`
-	Issuer     string   `json:"issuer"`
-	SANs       []string `json:"SANs"`
+	RemoteAddr   string   `json:"remote"`
+	Subject      string   `json:"subject"`
+	Issuer       string   `json:"issuer"`
+	SANs         []string `json:"SANs"`
+	ServerHeader string   `json:"server"`
 }

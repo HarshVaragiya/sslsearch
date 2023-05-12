@@ -7,7 +7,7 @@ import (
 	"io"
 	"regexp"
 
-	log "github.com/sirupsen/logrus"
+	logrus "github.com/sirupsen/logrus"
 	"github.com/valyala/fasthttp"
 )
 
@@ -38,13 +38,13 @@ func (aws AWS) GetCidrRanges(ctx context.Context, cidrChan chan string, region s
 	defer fasthttp.ReleaseResponse(resp)
 	req.SetRequestURI(AWS_IP_RANGES_URL)
 
-	log.WithFields(log.Fields{"state": "AWS", "action": "get-cidr-range"}).Info("fetching IP ranges from AWS")
+	log.WithFields(logrus.Fields{"state": "AWS", "action": "get-cidr-range"}).Info("fetching IP ranges from AWS")
 	err := fasthttp.Do(req, resp)
 
 	regionRegex := regexp.MustCompile(region)
 
 	if err != nil {
-		log.WithFields(log.Fields{"state": "AWS", "action": "get-cidr-range", "errmsg": err.Error()}).Fatal("error fetching IP ranges from AWS")
+		log.WithFields(logrus.Fields{"state": "AWS", "action": "get-cidr-range", "errmsg": err.Error()}).Fatal("error fetching IP ranges from AWS")
 	}
 	respBody := resp.Body()
 	dec := json.NewDecoder(bytes.NewReader(respBody))
@@ -53,20 +53,20 @@ func (aws AWS) GetCidrRanges(ctx context.Context, cidrChan chan string, region s
 			if err == io.EOF {
 				break
 			}
-			log.WithFields(log.Fields{"state": "AWS", "action": "get-cidr-range", "errmsg": err.Error()}).Fatal("error parsing response")
+			log.WithFields(logrus.Fields{"state": "AWS", "action": "get-cidr-range", "errmsg": err.Error()}).Fatal("error parsing response")
 		}
 		for _, prefix := range ipRangesResponse.Prefixes {
 			select {
 			case <-ctx.Done():
-				log.WithFields(log.Fields{"state": "AWS", "action": "get-cidr-range"}).Info("recieved context cancellation")
+				log.WithFields(logrus.Fields{"state": "AWS", "action": "get-cidr-range"}).Info("recieved context cancellation")
 				return
 			default:
 				if regionRegex.MatchString(prefix.Region) {
 					cidrChan <- prefix.IPPrefix
-					log.WithFields(log.Fields{"state": "AWS", "action": "get-cidr-range"}).Debugf("added %v to scan target", prefix.IPPrefix)
+					log.WithFields(logrus.Fields{"state": "AWS", "action": "get-cidr-range"}).Debugf("added %v to scan target", prefix.IPPrefix)
 				}
 			}
 		}
 	}
-	log.WithFields(log.Fields{"state": "AWS", "action": "get-cidr-range"}).Info("done adding all IPs from AWS to scan target")
+	log.WithFields(logrus.Fields{"state": "AWS", "action": "get-cidr-range"}).Info("done adding all IPs from AWS to scan target")
 }
