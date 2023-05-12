@@ -360,9 +360,9 @@ func SaveResultsToDisk(resultChan chan *CertResult, resultWg *sync.WaitGroup, ou
 			log.WithFields(logrus.Fields{"state": "save", "subject": result.Subject, "SANs": fmt.Sprintf("%s", result.SANs)}).Error("error saving result to disk")
 		}
 		if consoleout {
-			log.WithFields(logrus.Fields{"state": "save", "subject": result.Subject, "SANs": fmt.Sprintf("%s", result.SANs), "remote": result.RemoteAddr, "jarm": result.JARM, "server": result.ServerHeader}).Info()
+			log.WithFields(logrus.Fields{"state": "save", "subject": result.Subject, "SANs": fmt.Sprintf("%s", result.SANs), "jarm": result.JARM, "server": result.ServerHeader}).Info(result.RemoteAddr)
 		} else {
-			log.WithFields(logrus.Fields{"state": "save", "subject": result.Subject, "SANs": fmt.Sprintf("%s", result.SANs), "remote": result.RemoteAddr, "jarm": result.JARM, "server": result.ServerHeader}).Debug()
+			log.WithFields(logrus.Fields{"state": "save", "subject": result.Subject, "SANs": fmt.Sprintf("%s", result.SANs), "jarm": result.JARM, "server": result.ServerHeader}).Debug(result.RemoteAddr)
 		}
 	}
 }
