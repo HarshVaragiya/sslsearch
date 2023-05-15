@@ -86,11 +86,10 @@ var (
 			}
 		},
 	}
-	errConn              = fmt.Errorf("could not connect to remote host")
-	errNoTls             = fmt.Errorf("could not find TLS on remote port")
-	errNoMatch           = fmt.Errorf("certificate details did not match requirement")
-	errCtxCancelled      = fmt.Errorf("parent context cancelled")
-	errJarmNotCalculated = fmt.Errorf("error calculating JARM fingerprint")
+	errConn         = fmt.Errorf("could not connect to remote host")
+	errNoTls        = fmt.Errorf("could not find TLS on remote port")
+	errNoMatch      = fmt.Errorf("certificate details did not match requirement")
+	errCtxCancelled = fmt.Errorf("parent context cancelled")
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -125,30 +124,33 @@ func init() {
 
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
-	rootCmd.Flags().BoolVarP(&debugFlag, "debug", "v", false, "enable debug logs")
-	rootCmd.Flags().BoolVar(&traceFlag, "trace", false, "enable trace logs")
 
 	// refined input flags
-	rootCmd.Flags().StringVarP(&keywordRegexString, "keyword-regex", "k", ".*", "keyword regex to search in subject or SAN (ex: amazon,google). Default .* which matches all")
-	rootCmd.Flags().StringVarP(&regionRegexString, "region-regex", "r", ".*", "regex of cloud service provider region to search")
-	rootCmd.Flags().StringVarP(&portsString, "ports", "p", "443", "ports to search (default: 443)")
-	rootCmd.Flags().StringVarP(&outFileName, "out", "o", "output.log", "output file on disk")
-	rootCmd.Flags().BoolVar(&outputOverwrite, "overwrite", false, "overwrite output file if it exists")
-	rootCmd.Flags().IntVarP(&threadCount, "threads", "t", 2000, "number of parallel threads to use")
+	rootCmd.PersistentFlags().StringVarP(&keywordRegexString, "keyword-regex", "k", "", "keyword regex to search in subject or SAN (ex: .*amazon.* or .* which matches all)")
+	rootCmd.MarkPersistentFlagRequired("keyword-regex")
+
+	rootCmd.PersistentFlags().StringVarP(&portsString, "ports", "p", "443", "ports to search")
+	rootCmd.PersistentFlags().StringVarP(&outFileName, "out", "o", "output.log", "output file on disk")
+	rootCmd.PersistentFlags().BoolVar(&outputOverwrite, "overwrite", false, "overwrite output file if it exists")
+	rootCmd.PersistentFlags().IntVarP(&threadCount, "threads", "t", 2000, "number of parallel threads to use")
 
 	// advanced input flags
-	rootCmd.Flags().IntVar(&cidrSuffixPerGoRoutine, "suffix", 4, "CIDR suffix per goroutine (each thread will scan 2^x IPs. default 4)")
-	rootCmd.Flags().IntVar(&tcpTimeout, "timeout", 10, "tcp connection timeout in seconds")
-	rootCmd.Flags().BoolVar(&consoleOut, "console-out", false, "actively print result JSON to console")
+	rootCmd.PersistentFlags().IntVar(&cidrSuffixPerGoRoutine, "suffix", 4, "CIDR suffix per goroutine [each thread will scan 2^x IPs]")
+	rootCmd.PersistentFlags().IntVar(&tcpTimeout, "timeout", 10, "tcp connection timeout in seconds")
+	rootCmd.PersistentFlags().BoolVar(&consoleOut, "console-out", false, "actively print result JSON to console")
 
 	// recon flags
 	// server header
-	rootCmd.Flags().BoolVar(&grabServerHeader, "server-header", false, "attempt enrich results by grabbing the https server header for results")
-	rootCmd.Flags().IntVar(&serverHeaderThreadCount, "server-header-threads", 10, "number of threads to use for server header result enrichment")
+	rootCmd.PersistentFlags().BoolVar(&grabServerHeader, "server-header", false, "attempt enrich results by grabbing the https server header for results")
+	rootCmd.PersistentFlags().IntVar(&serverHeaderThreadCount, "server-header-threads", 100, "number of threads to use for server header result enrichment")
 
 	// JARM fingerprinting
-	rootCmd.Flags().BoolVar(&grabJarmFingerprint, "jarm", false, "attempt enrich results by grabbing the JARM fingerprint")
-	rootCmd.Flags().IntVar(&jarmRetryCount, "jarm-retry-count", 3, "retry attempts for JARM fingerprint (default 3)")
-	rootCmd.Flags().IntVar(&jarmFingerptintThreadCount, "jarm-threads", 50, "number of threads to use for JARM fingerprint enrichment")
+	rootCmd.PersistentFlags().BoolVar(&grabJarmFingerprint, "jarm", false, "attempt enrich results by grabbing the JARM fingerprint")
+	rootCmd.PersistentFlags().IntVar(&jarmRetryCount, "jarm-retry-count", 3, "retry attempts for JARM fingerprint")
+	rootCmd.PersistentFlags().IntVar(&jarmFingerptintThreadCount, "jarm-threads", 400, "number of threads to use for JARM fingerprint enrichment")
+
+	// debugging
+	rootCmd.PersistentFlags().BoolVarP(&debugFlag, "debug", "v", false, "enable debug logs")
+	rootCmd.PersistentFlags().BoolVar(&traceFlag, "trace", false, "enable trace logs")
 
 }

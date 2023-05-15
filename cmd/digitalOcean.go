@@ -1,32 +1,36 @@
 /*
 Copyright © 2023 NAME HERE <EMAIL ADDRESS>
-
 */
 package cmd
 
 import (
-	"fmt"
+	"bytes"
+	"context"
+	"encoding/csv"
+	"io"
+	"regexp"
+	"strings"
 
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"github.com/valyala/fasthttp"
 )
 
 // digitalOceanCmd represents the digitalOcean command
 var digitalOceanCmd = &cobra.Command{
 	Use:   "digitalOcean",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	Short: "Scan for a target on Digital Ocean. Region filtering supported",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("digitalOcean called")
+
+		PerformPreRunChecks(true)
+		ScanCloudServiceProvider(context.TODO(), "DigitalOcean", DigitalOcean{})
+
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(digitalOceanCmd)
+	digitalOceanCmd.Flags().StringVarP(&regionRegexString, "region-regex", "r", ".*", "regex of cloud service provider region to search")
 
 	// Here you will define your flags and configuration settings.
 
@@ -37,4 +41,54 @@ func init() {
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
 	// digitalOceanCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+}
+
+type DigitalOcean struct {
+}
+
+func (digitalOcean DigitalOcean) GetCidrRanges(ctx context.Context, cidrChan chan string, region string) {
+	defer close(cidrChan)
+
+	req := fasthttp.AcquireRequest()
+	resp := fasthttp.AcquireResponse()
+	defer fasthttp.ReleaseRequest(req)
+	defer fasthttp.ReleaseResponse(resp)
+	req.SetRequestURI(DIGITALOCEAN_IP_RANGES_URL)
+
+	log.WithFields(logrus.Fields{"state": "DigitalOcean", "action": "get-cidr-range"}).Info("fetching IP ranges")
+	err := fasthttp.Do(req, resp)
+
+	regionRegex := regexp.MustCompile(region)
+
+	if err != nil {
+		log.WithFields(logrus.Fields{"state": "DigitalOcean", "action": "get-cidr-range", "errmsg": err.Error()}).Fatal("error fetching IP ranges")
+	}
+	respBody := resp.Body()
+	reader := csv.NewReader(bytes.NewReader(respBody))
+	done := false
+	for !done {
+		select {
+		case <-ctx.Done():
+			log.WithFields(logrus.Fields{"state": "DigitalOcean", "action": "get-cidr-range"}).Info("recieved context cancellation")
+			done = true
+			return
+		default:
+			record, err := reader.Read()
+			if err != nil && err != io.EOF {
+				log.WithFields(logrus.Fields{"state": "DigitalOcean", "action": "get-cidr-range", "errmsg": err.Error()}).Fatal("error parsing response")
+				done = true
+				break
+			} else if err == io.EOF {
+				done = true
+				break
+			}
+			cidr := record[0]
+			regionNameString := strings.Join(record[1:4], "_")
+			if regionRegex.MatchString(regionNameString) {
+				cidrChan <- cidr
+				log.WithFields(logrus.Fields{"state": "DigitalOcean", "action": "get-cidr-range"}).Debugf("added %v to scan target", cidr)
+			}
+		}
+	}
+	log.WithFields(logrus.Fields{"state": "DigitalOcean", "action": "get-cidr-range"}).Info("done adding all IPs")
 }
