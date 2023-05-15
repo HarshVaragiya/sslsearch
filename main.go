@@ -25,15 +25,13 @@ const (
 )
 
 var (
-	log                = logrus.New()
-	statsLock          = sync.RWMutex{}
-	cidrRangesToScan   = 0
-	cidrRangesScanned  = 0
-	totalIpsScanned    = 0
-	totalFindings      = 0
-	jarmRetryCount     = 3
-	jarmDefaultBackoff = time.Second * 2
-	jarmDeadlines      = time.Second * 5
+	log               = logrus.New()
+	statsLock         = sync.RWMutex{}
+	cidrRangesToScan  = 0
+	cidrRangesScanned = 0
+	totalIpsScanned   = 0
+	totalFindings     = 0
+	jarmRetryCount    = 3
 
 	tcpTimeout = 10
 

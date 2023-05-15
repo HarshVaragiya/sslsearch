@@ -7,9 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
-	jarm "github.com/hdm/jarm-go"
+	"github.com/HarshVaragiya/jarm-go"
 	"github.com/seancfoley/ipaddress-go/ipaddr"
 	"github.com/sirupsen/logrus"
 	"github.com/valyala/fasthttp"
@@ -109,51 +108,22 @@ func GrabServerHeaderForRemote(remote string) (string, error) {
 }
 
 func GetJARMFingerprint(remote string) (string, error) {
-	remoteAddr := strings.Split(remote, ":")
-	host := remoteAddr[0]
-	port, _ := strconv.Atoi(remoteAddr[1])
-	results := []string{}
-	for _, probe := range jarm.GetProbes(host, port) {
-		dialer := dialerPool.Get().(*net.Dialer)
-		defer dialerPool.Put(dialer)
-
-		c := net.Conn(nil)
-		n := 0
-		for c == nil && n <= jarmRetryCount {
-			// Ignoring error since error message was already being dropped.
-			// Also, if theres an error, c == nil.
-			if c, _ = dialer.Dial("tcp", remote); c != nil || jarmRetryCount == 0 {
-				break
-			}
-			time.Sleep(jarmDefaultBackoff)
-			n++
-		}
-
-		if c == nil {
-			return "", errJarmNotCalculated
-		}
-
-		data := jarm.BuildProbe(probe)
-		c.SetWriteDeadline(time.Now().Add(jarmDeadlines))
-		_, err := c.Write(data)
-		if err != nil {
-			results = append(results, "")
-			c.Close()
-			continue
-		}
-
-		c.SetReadDeadline(time.Now().Add(jarmDeadlines))
-		buff := make([]byte, 1484)
-		c.Read(buff)
-		c.Close()
-
-		ans, err := jarm.ParseServerHello(buff, probe)
-		if err != nil {
-			results = append(results, "")
-			continue
-		}
-
-		results = append(results, ans)
+	host, port := SplitRemoteAddr(remote)
+	target := jarm.Target{
+		Host:    host,
+		Port:    port,
+		Retries: jarmRetryCount,
 	}
-	return jarm.RawHashToFuzzyHash(strings.Join(results, ",")), nil
+	res, err := jarm.Fingerprint(target)
+	if res == nil {
+		return "", err
+	}
+	return res.Hash, err
+}
+
+func SplitRemoteAddr(remote string) (host string, port int) {
+	s := strings.Split(remote, ":")
+	host = s[0]
+	port, _ = strconv.Atoi(s[1])
+	return
 }
