@@ -286,6 +286,9 @@ func GetJARMFingerprint(remote string) (string, error) {
 	if res == nil {
 		return "", err
 	}
+	if err == nil {
+		return res.Hash, res.Error
+	}
 	return res.Hash, err
 }
 
