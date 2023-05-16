@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/csv"
+	"fmt"
 	"io"
 	"regexp"
 	"strings"
@@ -66,6 +67,7 @@ func (digitalOcean DigitalOcean) GetCidrRanges(ctx context.Context, cidrChan cha
 	respBody := resp.Body()
 	reader := csv.NewReader(bytes.NewReader(respBody))
 	done := false
+	fmt.Printf("DO response : %v", string(respBody))
 	for !done {
 		select {
 		case <-ctx.Done():
@@ -86,7 +88,9 @@ func (digitalOcean DigitalOcean) GetCidrRanges(ctx context.Context, cidrChan cha
 			regionNameString := strings.Join(record[1:4], "_")
 			if regionRegex.MatchString(regionNameString) {
 				cidrChan <- cidr
-				log.WithFields(logrus.Fields{"state": "DigitalOcean", "action": "get-cidr-range"}).Debugf("added %v to scan target", cidr)
+				log.WithFields(logrus.Fields{"state": "DigitalOcean", "action": "get-cidr-range"}).Debugf("added %v to scan target for region %v", cidr, regionNameString)
+			} else {
+				log.WithFields(logrus.Fields{"state": "DigitalOcean", "action": "get-cidr-range"}).Debugf("skipped %v from region %v", cidr, regionNameString)
 			}
 		}
 	}

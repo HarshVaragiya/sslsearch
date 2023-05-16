@@ -16,7 +16,7 @@ import (
 
 func ScanCertificatesInCidr(ctx context.Context, cidrChan chan string, ports []string, resultChan chan *CertResult, wg *sync.WaitGroup, keywordRegexString string) {
 	defer wg.Done()
-	keywordRegex := regexp.MustCompile(keywordRegexString)
+	keywordRegex := regexp.MustCompile("(?i)" + keywordRegexString)
 	for {
 		select {
 		case <-ctx.Done():

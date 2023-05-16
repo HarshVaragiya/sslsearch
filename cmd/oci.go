@@ -97,6 +97,8 @@ func (oracle Oracle) GetCidrRanges(ctx context.Context, cidrChan chan string, re
 						log.WithFields(logrus.Fields{"state": "OCI", "action": "get-cidr-range"}).Debugf("added %v to scan target", cidr.Cidr)
 					}
 				}
+			} else {
+				log.WithFields(logrus.Fields{"state": "OCI", "action": "get-cidr-range"}).Debugf("skipped region %v", regionElement.Region)
 			}
 		}
 	}

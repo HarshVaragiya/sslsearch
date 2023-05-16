@@ -97,7 +97,9 @@ func (gcp GCP) GetCidrRanges(ctx context.Context, cidrChan chan string, region s
 						continue
 					}
 					cidrChan <- prefix.Ipv4Prefix
-					log.WithFields(logrus.Fields{"state": "GCP", "action": "get-cidr-range"}).Debugf("added %v to scan target", prefix.Ipv4Prefix)
+					log.WithFields(logrus.Fields{"state": "GCP", "action": "get-cidr-range"}).Debugf("added %v to scan target for region %v", prefix.Ipv4Prefix, prefix.Scope)
+				} else {
+					log.WithFields(logrus.Fields{"state": "GCP", "action": "get-cidr-range"}).Debugf("skipped %v from region %v", prefix.Ipv4Prefix, prefix.Scope)
 				}
 			}
 		}

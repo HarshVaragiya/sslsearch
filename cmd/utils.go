@@ -32,7 +32,7 @@ func PerformPreRunChecks(checkRegion bool) {
 
 // perform sanity check on inputs
 func CheckInputParameters() {
-	if _, err := regexp.Compile(keywordRegexString); err != nil {
+	if _, err := regexp.Compile("(?i)" + keywordRegexString); err != nil {
 		log.WithFields(logrus.Fields{"state": "main"}).Fatal("could not compile keyword regex")
 	}
 }
@@ -96,9 +96,8 @@ func ScanCloudServiceProvider(ctx context.Context, csp string, cloudServiceProvi
 }
 
 func RunScan(cidrChan chan string) {
-	// variables
 	ports := strings.Split(portsString, ",")
-	log.WithFields(logrus.Fields{"state": "main"}).Infof("parsed ports to scan: %s", ports)
+	log.WithFields(logrus.Fields{"state": "main"}).Infof("ports to be scanned: %s", ports)
 	resultChan := make(chan *CertResult, threadCount*2)
 	var enrichedResultChan chan *CertResult
 	ctx, cancelFunc := context.WithCancel(context.Background())
@@ -110,7 +109,7 @@ func RunScan(cidrChan chan string) {
 	go func() {
 		s := <-signals
 		log.WithFields(logrus.Fields{"state": "main"}).Infof("received %v ... cancelling context.", s.String())
-		log.WithFields(logrus.Fields{"state": "main"}).Infof("waiting for threads to exit ... do not force exit right now!")
+		log.WithFields(logrus.Fields{"state": "main"}).Infof("waiting for threads to exit ...")
 		cancelFunc()
 		s = <-signals
 		log.WithFields(logrus.Fields{"state": "main"}).Fatal("forcing exit due to %v", s.String())
@@ -161,7 +160,7 @@ func RunScan(cidrChan chan string) {
 	resultWg := &sync.WaitGroup{}
 	resultWg.Add(1)
 	go SaveResultsToDisk(enrichedResultChan, resultWg, outFile, consoleOut)
-	go PrintProgressToConsole(2000)
+	go PrintProgressToConsole(consoleRefreshMs)
 
 	// wait for everything to finish!
 	log.WithFields(logrus.Fields{"state": "main"}).Info("waiting for threads to finish scanning")

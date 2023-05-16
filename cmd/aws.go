@@ -94,7 +94,9 @@ func (aws AWS) GetCidrRanges(ctx context.Context, cidrChan chan string, region s
 			default:
 				if regionRegex.MatchString(prefix.Region) {
 					cidrChan <- prefix.IPPrefix
-					log.WithFields(logrus.Fields{"state": "AWS", "action": "get-cidr-range"}).Debugf("added %v to scan target", prefix.IPPrefix)
+					log.WithFields(logrus.Fields{"state": "AWS", "action": "get-cidr-range"}).Debugf("added %v to scan target for region %v", prefix.IPPrefix, prefix.Region)
+				} else {
+					log.WithFields(logrus.Fields{"state": "AWS", "action": "get-cidr-range"}).Debugf("skipped %v from region %v", prefix.IPPrefix, prefix.Region)
 				}
 			}
 		}
