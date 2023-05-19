@@ -2,6 +2,11 @@
 
 Hunt SSL Certificates for interesting keywords on major cloud service providers 
 
+### Installation
+```bash
+go install github.com/HarshVaragiya/sslsearch@latest
+```
+
 ## Features
 - Search Cloud Service Providers IP Ranges / Given IP CIDR for keywords in SSL Certificate Subject / SANs
 - Perform Initial fingerprinting (https server header grabbing / JARM fingerprinting)
