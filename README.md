@@ -25,3 +25,10 @@ Hunt SSL Certificates for interesting keywords on major cloud service providers
 4. Scanning the whole Internet / Country's CIDRs & Collecting JARM fingerprints / Server Headers along with SSL certificate information. 
 
 
+
+## References
+Ideated after following the following research projects : 
+- https://github.com/jhaddix/awsScrape
+- https://github.com/femueller/cloud-ip-ranges 
+- https://github.com/hdm/jarm-go 
+- https://github.com/salesforce/jarm 
