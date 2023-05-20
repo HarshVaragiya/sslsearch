@@ -143,11 +143,11 @@ func init() {
 
 	// Recon flags
 	// Server Header enumeration
-	rootCmd.PersistentFlags().BoolVar(&grabServerHeader, "server-header", false, "attempt enrich results by grabbing the https server header for results")
+	rootCmd.PersistentFlags().BoolVar(&grabServerHeader, "server-header", false, "attempt to enrich results by grabbing the https server header for results")
 	rootCmd.PersistentFlags().IntVar(&serverHeaderThreadCount, "server-header-threads", 40, "number of threads to use for server header result enrichment")
 
 	// JARM fingerprinting
-	rootCmd.PersistentFlags().BoolVar(&grabJarmFingerprint, "jarm", false, "attempt enrich results by grabbing the JARM fingerprint")
+	rootCmd.PersistentFlags().BoolVar(&grabJarmFingerprint, "jarm", false, "attempt to enrich results by grabbing the JARM fingerprint")
 	rootCmd.PersistentFlags().IntVar(&jarmRetryCount, "jarm-retry-count", 3, "retry attempts for JARM fingerprint")
 	rootCmd.PersistentFlags().IntVar(&jarmFingerptintThreadCount, "jarm-threads", 40, "number of threads to use for JARM fingerprint enrichment (>200 might not be stable)")
 
