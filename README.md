@@ -27,7 +27,8 @@ go install github.com/HarshVaragiya/sslsearch@latest
 1. Identifying Infrastructure / Attack Surface for a given scope.
 2. Bug Bounty recon. 
 3. Scanning a whole CSP Region & Identifying Servers / Services of interest along with SSL certificate information.  
-4. Scanning the whole Internet / Country's CIDRs & Collecting JARM fingerprints / Server Headers along with SSL certificate information. 
+4. Scanning the whole Internet / Country's CIDRs & Collecting JARM fingerprints / Server Headers along with SSL certificate information.
+5. Finding Mail / RDP / Other services belonging to a target that use x509 certificates to secure connections. 
 
 
 
