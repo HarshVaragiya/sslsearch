@@ -1,6 +1,10 @@
 # SSL Search
 
-Hunt SSL Certificates for interesting keywords on major cloud service providers 
+Hunt SSL Certificates for interesting keywords on major cloud service providers. 
+
+
+Details - https://medium.com/@harsh8v/ssl-search-a-tool-to-identify-infrastructure-and-discover-attack-surfaces-449c83269574
+
 
 ### Installation
 ```bash
