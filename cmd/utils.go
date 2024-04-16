@@ -54,15 +54,15 @@ func UpdateLogLevel() {
 }
 
 func PerformOutputChecks() {
-	if _, err := os.Stat(outFileName); err == nil {
-		if outputOverwrite {
-			log.WithFields(logrus.Fields{"state": "main"}).Info("overwriting existing output file in 5 seconds")
-			time.Sleep(5 * time.Second)
-		} else {
-			log.WithFields(logrus.Fields{"state": "main"}).Fatal("output file exists & overwrite flag not supplied!")
+	if outFileName == "" && cassandraConnectionString == "" {
+		log.WithFields(logrus.Fields{"state": "main"}).Fatal("output file / cassandra connection string must be supplied!")
+	}
+	if outFileName != "" {
+		if _, err := os.Stat(outFileName); err == nil {
+			log.WithFields(logrus.Fields{"state": "main"}).Fatal("output file already exists!")
+		} else if errors.Is(err, os.ErrNotExist) {
+			log.WithFields(logrus.Fields{"state": "main"}).Debugf("output file does not exist and will be created")
 		}
-	} else if errors.Is(err, os.ErrNotExist) {
-		log.WithFields(logrus.Fields{"state": "main"}).Debugf("output file does not exist and will be created")
 	}
 }
 

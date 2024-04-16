@@ -35,21 +35,23 @@ import (
 )
 
 var (
-	debugFlag              bool
-	traceFlag              bool
-	keywordRegexString     string
-	regionRegexString      string
-	portsString            string
-	outFileName            string
-	outputOverwrite        bool
+	debugFlag          bool
+	traceFlag          bool
+	keywordRegexString string
+	regionRegexString  string
+	portsString        string
+
 	threadCount            int
 	cidrSuffixPerGoRoutine int
-	consoleOut             bool
 
 	grabServerHeader           bool
 	grabJarmFingerprint        bool
 	serverHeaderThreadCount    int
 	jarmFingerptintThreadCount int
+
+	// Export Configuration
+	outFileName string
+	consoleOut  bool
 
 	cassandraConnectionString   string
 	cassandraKeyspace_Table     string
@@ -139,11 +141,10 @@ func init() {
 	rootCmd.PersistentFlags().IntVar(&consoleRefreshMs, "refresh", 1000, "console progress refresh ms")
 
 	// Export to disk
-	rootCmd.PersistentFlags().StringVarP(&outFileName, "output", "o", "output.log", "output file on disk")
-	rootCmd.PersistentFlags().BoolVar(&outputOverwrite, "overwrite", false, "overwrite output file if it exists")
+	rootCmd.PersistentFlags().StringVarP(&outFileName, "output", "o", "", "output file on disk")
 
 	// Export to cassandra
-	rootCmd.PersistentFlags().StringVar(&cassandraConnectionString, "host", "127.0.0.1:9000", "cassandra connection string")
+	rootCmd.PersistentFlags().StringVar(&cassandraConnectionString, "host", "", "cassandra connection string")
 	rootCmd.PersistentFlags().StringVar(&cassandraKeyspace_Table, "table", "recon.sslsearch", "cassandra keyspace.table name to store data")
 	rootCmd.PersistentFlags().StringVar(&cassandraResultTimeStampKey, "result-ts-key", "", "cassandra default result timestamp key (defaults to YYYY-MM-DD)")
 
