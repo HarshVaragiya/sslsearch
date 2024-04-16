@@ -67,8 +67,8 @@ func PerformOutputChecks() {
 }
 
 func ScanCloudServiceProvider(ctx context.Context, csp string, cloudServiceProvider CidrRangeInput) {
-	cidrChan := make(chan string, threadCount*5)
-	cspCidrChan := make(chan string, threadCount*2)
+	cidrChan := make(chan CidrRange, threadCount*5)
+	cspCidrChan := make(chan CidrRange, threadCount*2)
 
 	go func() {
 		cloudServiceProvider.GetCidrRanges(ctx, cspCidrChan, regionRegexString)
@@ -95,7 +95,7 @@ func ScanCloudServiceProvider(ctx context.Context, csp string, cloudServiceProvi
 	RunScan(cidrChan)
 }
 
-func RunScan(cidrChan chan string) {
+func RunScan(cidrChan chan CidrRange) {
 	ports := strings.Split(portsString, ",")
 	log.WithFields(logrus.Fields{"state": "main"}).Infof("ports to be scanned: %s", ports)
 	resultChan := make(chan *CertResult, threadCount*2)
@@ -211,8 +211,8 @@ func getRemoteAddrString(ip, port string) string {
 	return fmt.Sprintf("%v:%v", ip, port)
 }
 
-func SplitCIDR(cidrString string, suffixLenPerGoRoutine int, cidrChan chan string) error {
-	cidr := ipaddr.NewIPAddressString(cidrString).GetAddress()
+func SplitCIDR(cidrString CidrRange, suffixLenPerGoRoutine int, cidrChan chan CidrRange) error {
+	cidr := ipaddr.NewIPAddressString(cidrString.Cidr).GetAddress()
 	cidrRange := cidr.GetPrefixLen().Len()
 	adjustPrefixLength := 32 - cidrRange - suffixLenPerGoRoutine
 	if adjustPrefixLength < 0 {
@@ -223,7 +223,7 @@ func SplitCIDR(cidrString string, suffixLenPerGoRoutine int, cidrChan chan strin
 		statsLock.Lock()
 		cidrRangesToScan += 1
 		statsLock.Unlock()
-		cidrChan <- nextCidr
+		cidrChan <- CidrRange{Cidr: nextCidr, CSP: cidrString.CSP, Region: cidrString.Region}
 	}
 	return nil
 }

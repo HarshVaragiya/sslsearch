@@ -21,11 +21,12 @@ var cidrCmd = &cobra.Command{
 			log.WithFields(logrus.Fields{"state": "main"}).Fatalf("error parsing input args as CIDR. args: %v", args)
 		}
 
-		cidrChan := make(chan string, threadCount*5)
+		cidrChan := make(chan CidrRange, threadCount*5)
 		// generate input ips
 		go func() {
 			defer close(cidrChan)
-			err := SplitCIDR(args[0], cidrSuffixPerGoRoutine, cidrChan)
+			cidr := CidrRange{Cidr: args[0], CSP: "NA", Region: "NA"}
+			err := SplitCIDR(cidr, cidrSuffixPerGoRoutine, cidrChan)
 			if err != nil {
 				log.WithFields(logrus.Fields{"state": "main", "action": "divide-cidr", "errmsg": err.Error(), "cidr": args[0]}).Fatal("error generating sub-CIDR ranges")
 			}

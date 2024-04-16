@@ -47,7 +47,7 @@ func init() {
 type DigitalOcean struct {
 }
 
-func (digitalOcean DigitalOcean) GetCidrRanges(ctx context.Context, cidrChan chan string, region string) {
+func (digitalOcean DigitalOcean) GetCidrRanges(ctx context.Context, cidrChan chan CidrRange, region string) {
 	defer close(cidrChan)
 
 	req := fasthttp.AcquireRequest()
@@ -87,7 +87,7 @@ func (digitalOcean DigitalOcean) GetCidrRanges(ctx context.Context, cidrChan cha
 			cidr := record[0]
 			regionNameString := strings.Join(record[1:4], "_")
 			if regionRegex.MatchString(regionNameString) {
-				cidrChan <- cidr
+				cidrChan <- CidrRange{Cidr: cidr, CSP: "DigitalOcean", Region: regionNameString}
 				log.WithFields(logrus.Fields{"state": "DigitalOcean", "action": "get-cidr-range"}).Debugf("added %v to scan target for region %v", cidr, regionNameString)
 			} else {
 				log.WithFields(logrus.Fields{"state": "DigitalOcean", "action": "get-cidr-range"}).Debugf("skipped %v from region %v", cidr, regionNameString)
