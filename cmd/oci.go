@@ -57,7 +57,7 @@ type OracleIPRangeResponse struct {
 	RegionsElements []*RegionsElement `json:"regions"`
 }
 
-func (oracle Oracle) GetCidrRanges(ctx context.Context, cidrChan chan string, region string) {
+func (oracle Oracle) GetCidrRanges(ctx context.Context, cidrChan chan CidrRange, region string) {
 	var ipRangesResponse OracleIPRangeResponse
 
 	defer close(cidrChan)
@@ -93,7 +93,7 @@ func (oracle Oracle) GetCidrRanges(ctx context.Context, cidrChan chan string, re
 						log.WithFields(logrus.Fields{"state": "OCI", "action": "get-cidr-range"}).Info("recieved context cancellation")
 						return
 					default:
-						cidrChan <- cidr.Cidr
+						cidrChan <- CidrRange{Cidr: cidr.Cidr, CSP: "OCI", Region: regionElement.Region}
 						log.WithFields(logrus.Fields{"state": "OCI", "action": "get-cidr-range"}).Debugf("added %v to scan target", cidr.Cidr)
 					}
 				}

@@ -50,6 +50,10 @@ var (
 	grabJarmFingerprint        bool
 	serverHeaderThreadCount    int
 	jarmFingerptintThreadCount int
+
+	cassandraConnectionString   string
+	cassandraKeyspace_Table     string
+	cassandraResultTimeStampKey string
 )
 
 var (
@@ -131,10 +135,17 @@ func init() {
 	rootCmd.MarkPersistentFlagRequired("keyword-regex")
 
 	rootCmd.PersistentFlags().StringVarP(&portsString, "ports", "p", "443", "ports to search")
-	rootCmd.PersistentFlags().StringVarP(&outFileName, "output", "o", "output.log", "output file on disk")
-	rootCmd.PersistentFlags().BoolVar(&outputOverwrite, "overwrite", false, "overwrite output file if it exists")
 	rootCmd.PersistentFlags().IntVarP(&threadCount, "threads", "t", 1000, "number of parallel threads to use")
 	rootCmd.PersistentFlags().IntVar(&consoleRefreshMs, "refresh", 1000, "console progress refresh ms")
+
+	// Export to disk
+	rootCmd.PersistentFlags().StringVarP(&outFileName, "output", "o", "output.log", "output file on disk")
+	rootCmd.PersistentFlags().BoolVar(&outputOverwrite, "overwrite", false, "overwrite output file if it exists")
+
+	// Export to cassandra
+	rootCmd.PersistentFlags().StringVar(&cassandraConnectionString, "host", "127.0.0.1:9000", "cassandra connection string")
+	rootCmd.PersistentFlags().StringVar(&cassandraKeyspace_Table, "table", "recon.sslsearch", "cassandra keyspace.table name to store data")
+	rootCmd.PersistentFlags().StringVar(&cassandraResultTimeStampKey, "result-ts-key", "", "cassandra default result timestamp key (defaults to YYYY-MM-DD)")
 
 	// advanced input flags
 	rootCmd.PersistentFlags().IntVar(&cidrSuffixPerGoRoutine, "suffix", 4, "CIDR suffix per goroutine [each thread will scan 2^x IPs]")

@@ -41,7 +41,7 @@ func init() {
 type Cloudflare struct {
 }
 
-func (cloudflare Cloudflare) GetCidrRanges(ctx context.Context, cidrChan chan string, region string) {
+func (cloudflare Cloudflare) GetCidrRanges(ctx context.Context, cidrChan chan CidrRange, region string) {
 	defer close(cidrChan)
 
 	log.WithFields(logrus.Fields{"state": "Cloudflare", "action": "get-cidr-range"}).Warning("region filtering not supported!")
@@ -67,7 +67,7 @@ func (cloudflare Cloudflare) GetCidrRanges(ctx context.Context, cidrChan chan st
 			log.WithFields(logrus.Fields{"state": "Cloudflare", "action": "get-cidr-range"}).Info("recieved context cancellation")
 			return
 		default:
-			cidrChan <- cidr
+			cidrChan <- CidrRange{Cidr: cidr, CSP: "Cloudflare", Region: "Unknown"}
 			log.WithFields(logrus.Fields{"state": "Cloudflare", "action": "get-cidr-range"}).Debugf("added %v to scan target", cidr)
 		}
 	}

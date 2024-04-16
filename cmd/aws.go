@@ -58,7 +58,7 @@ type AwsPrefix struct {
 	// NetworkBorderGroup string `json:"network_border_group"` IGNORED
 }
 
-func (aws AWS) GetCidrRanges(ctx context.Context, cidrChan chan string, region string) {
+func (aws AWS) GetCidrRanges(ctx context.Context, cidrChan chan CidrRange, region string) {
 	var ipRangesResponse AwsIPRangeResponse
 
 	defer close(cidrChan)
@@ -93,7 +93,7 @@ func (aws AWS) GetCidrRanges(ctx context.Context, cidrChan chan string, region s
 				return
 			default:
 				if regionRegex.MatchString(prefix.Region) {
-					cidrChan <- prefix.IPPrefix
+					cidrChan <- CidrRange{Cidr: prefix.IPPrefix, CSP: "AWS", Region: prefix.Region, Meta: prefix.Service}
 					log.WithFields(logrus.Fields{"state": "AWS", "action": "get-cidr-range"}).Debugf("added %v to scan target for region %v", prefix.IPPrefix, prefix.Region)
 				} else {
 					log.WithFields(logrus.Fields{"state": "AWS", "action": "get-cidr-range"}).Debugf("skipped %v from region %v", prefix.IPPrefix, prefix.Region)

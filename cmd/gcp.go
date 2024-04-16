@@ -48,8 +48,8 @@ type GCP struct {
 type GcpPrefix struct {
 	Ipv4Prefix string `json:"ipv4Prefix"` // IPv4 Cidr that usually appears
 	Ipv6Prefix string `json:"ipv6Prefix"` // Ipv6 Cidr that appears sometimes
-	// Service    string `json:"service"` # always remains "Google Cloud" hence skipped
-	Scope string `json:"scope"` // Region Key
+	Service    string `json:"service"`    // mostly remains "Google Cloud" ??
+	Scope      string `json:"scope"`      // Region Key
 }
 
 type GcpIPRangeResponse struct {
@@ -58,7 +58,7 @@ type GcpIPRangeResponse struct {
 	Prefixes     []*GcpPrefix `json:"prefixes"`
 }
 
-func (gcp GCP) GetCidrRanges(ctx context.Context, cidrChan chan string, region string) {
+func (gcp GCP) GetCidrRanges(ctx context.Context, cidrChan chan CidrRange, region string) {
 	var ipRangesResponse GcpIPRangeResponse
 
 	defer close(cidrChan)
@@ -96,7 +96,7 @@ func (gcp GCP) GetCidrRanges(ctx context.Context, cidrChan chan string, region s
 					if prefix.Ipv6Prefix != "" {
 						continue
 					}
-					cidrChan <- prefix.Ipv4Prefix
+					cidrChan <- CidrRange{Cidr: prefix.Ipv4Prefix, CSP: "GCP", Region: prefix.Scope, Meta: prefix.Service}
 					log.WithFields(logrus.Fields{"state": "GCP", "action": "get-cidr-range"}).Debugf("added %v to scan target for region %v", prefix.Ipv4Prefix, prefix.Scope)
 				} else {
 					log.WithFields(logrus.Fields{"state": "GCP", "action": "get-cidr-range"}).Debugf("skipped %v from region %v", prefix.Ipv4Prefix, prefix.Scope)

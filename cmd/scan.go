@@ -3,10 +3,8 @@ package cmd
 import (
 	"context"
 	"crypto/tls"
-	"encoding/json"
 	"fmt"
 	"net"
-	"os"
 	"regexp"
 	"sync"
 	"time"
@@ -14,7 +12,7 @@ import (
 	logrus "github.com/sirupsen/logrus"
 )
 
-func ScanCertificatesInCidr(ctx context.Context, cidrChan chan string, ports []string, resultChan chan *CertResult, wg *sync.WaitGroup, keywordRegexString string) {
+func ScanCertificatesInCidr(ctx context.Context, cidrChan chan CidrRange, ports []string, resultChan chan *CertResult, wg *sync.WaitGroup, keywordRegexString string) {
 	defer wg.Done()
 	keywordRegex := regexp.MustCompile("(?i)" + keywordRegexString)
 	for {
@@ -26,7 +24,7 @@ func ScanCertificatesInCidr(ctx context.Context, cidrChan chan string, ports []s
 			if !open {
 				return
 			}
-			ip, ipNet, err := net.ParseCIDR(cidr)
+			ip, ipNet, err := net.ParseCIDR(cidr.Cidr)
 			if err != nil {
 				log.WithFields(logrus.Fields{"state": "scan", "errmsg": err.Error(), "cidr": cidr}).Errorf("failed to parse CIDR")
 				continue
@@ -40,6 +38,9 @@ func ScanCertificatesInCidr(ctx context.Context, cidrChan chan string, ports []s
 						log.WithFields(logrus.Fields{"state": "deepscan", "remote": remote, "errmsg": err.Error()}).Tracef("error")
 						continue
 					} else {
+						result.CSP = cidr.CSP
+						result.Region = cidr.Region
+						result.Meta = cidr.Meta
 						resultChan <- result
 					}
 				}
@@ -99,21 +100,6 @@ func Summarize(start, stop time.Time) {
 	fmt.Printf("Total CIDR ranges Scanned   : %v \n", cidrRangesScanned)
 	fmt.Printf("Time Elapsed                : %v \n", elapsedTime)
 	fmt.Printf("Scan Speed                  : %v IPs/second \n", (1000000000*totalIpsScanned)/int(elapsedTime))
-}
-
-func SaveResultsToDisk(resultChan chan *CertResult, resultWg *sync.WaitGroup, outFile *os.File, consoleout bool) {
-	defer resultWg.Done()
-	enc := json.NewEncoder(outFile)
-	for result := range resultChan {
-		if err := enc.Encode(result); err != nil {
-			log.WithFields(logrus.Fields{"state": "save", "subject": result.Subject, "SANs": fmt.Sprintf("%s", result.SANs)}).Error("error saving result to disk")
-		}
-		if consoleout {
-			log.WithFields(logrus.Fields{"state": "save", "subject": result.Subject, "SANs": fmt.Sprintf("%s", result.SANs), "jarm": result.JARM, "server": result.ServerHeader}).Info(result.RemoteAddr)
-		} else {
-			log.WithFields(logrus.Fields{"state": "save", "subject": result.Subject, "SANs": fmt.Sprintf("%s", result.SANs), "jarm": result.JARM, "server": result.ServerHeader}).Debug(result.RemoteAddr)
-		}
-	}
 }
 
 func PrintProgressToConsole(refreshInterval int) {

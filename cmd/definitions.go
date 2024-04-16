@@ -15,7 +15,14 @@ const (
 )
 
 type CidrRangeInput interface {
-	GetCidrRanges(context.Context, chan string, string)
+	GetCidrRanges(context.Context, chan CidrRange, string)
+}
+
+type CidrRange struct {
+	Cidr   string
+	CSP    string
+	Region string
+	Meta   string
 }
 
 type CertResult struct {
@@ -25,4 +32,7 @@ type CertResult struct {
 	SANs         []string `json:"SANs"`
 	ServerHeader string   `json:"server"`
 	JARM         string   `json:"jarm"`
+	CSP          string   `json:"cloud"`
+	Region       string   `json:"region"`
+	Meta         string   `json:"metadata"`
 }
