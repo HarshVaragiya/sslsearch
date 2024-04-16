@@ -43,6 +43,12 @@ func CheckRegionRegex() {
 	}
 }
 
+func GetRecordTimestampKey() string {
+	currentTime := time.Now()
+	formattedTime := currentTime.Format("2006-01-02")
+	return formattedTime
+}
+
 func UpdateLogLevel() {
 	if traceFlag {
 		log.SetLevel(logrus.TraceLevel)
@@ -63,6 +69,9 @@ func PerformOutputChecks() {
 		} else if errors.Is(err, os.ErrNotExist) {
 			log.WithFields(logrus.Fields{"state": "main"}).Debugf("output file does not exist and will be created")
 		}
+	}
+	if cassandraRecordTimeStampKey == "" {
+		cassandraRecordTimeStampKey = GetRecordTimestampKey()
 	}
 }
 
@@ -112,16 +121,16 @@ func RunScan(cidrChan chan CidrRange) {
 		log.WithFields(logrus.Fields{"state": "main"}).Infof("waiting for threads to exit ...")
 		cancelFunc()
 		s = <-signals
-		log.WithFields(logrus.Fields{"state": "main"}).Fatal("forcing exit due to %v", s.String())
+		log.WithFields(logrus.Fields{"state": "main"}).Fatalf("forcing exit due to %v", s.String())
 	}()
 
 	// log results to disk
-	log.WithFields(logrus.Fields{"state": "main"}).Infof("saving output to: %v", outFileName)
-	outFile, err := os.OpenFile(outFileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-	if err != nil {
-		log.WithFields(logrus.Fields{"state": "main", "errmsg": err.Error()}).Fatalf("could not open output file for writing")
-	}
-	defer outFile.Close()
+	// log.WithFields(logrus.Fields{"state": "main"}).Infof("saving output to: %v", outFileName)
+	// outFile, err := os.OpenFile(outFileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	// if err != nil {
+	// 	log.WithFields(logrus.Fields{"state": "main", "errmsg": err.Error()}).Fatalf("could not open output file for writing")
+	// }
+	// defer outFile.Close()
 
 	// start scanning
 	startTime := time.Now()
@@ -159,7 +168,7 @@ func RunScan(cidrChan chan CidrRange) {
 	// save results to disk
 	resultWg := &sync.WaitGroup{}
 	resultWg.Add(1)
-	go SaveResultsToDisk(enrichedResultChan, resultWg, outFile, consoleOut)
+	go ExportResultsToCassandra(enrichedResultChan, resultWg, consoleOut)
 	go PrintProgressToConsole(consoleRefreshMs)
 
 	// wait for everything to finish!
@@ -179,7 +188,6 @@ func RunScan(cidrChan chan CidrRange) {
 	log.WithFields(logrus.Fields{"state": "main"}).Info("done writing results to disk")
 
 	Summarize(startTime, stopTime)
-
 }
 
 func GetCspInstance(cspString string) (CidrRangeInput, error) {

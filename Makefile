@@ -1,4 +1,4 @@
 build:
 	echo "building binary"
 	mkdir -p bin
-	go build -o bin/sslsearch .
+	GOOS=linux CGO_ENABLED=0 go build -o bin/sslsearch .

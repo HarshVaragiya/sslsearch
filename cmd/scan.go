@@ -41,6 +41,7 @@ func ScanCertificatesInCidr(ctx context.Context, cidrChan chan CidrRange, ports 
 						result.CSP = cidr.CSP
 						result.Region = cidr.Region
 						result.Meta = cidr.Meta
+						result.Timestamp = time.Now()
 						resultChan <- result
 					}
 				}
