@@ -55,7 +55,7 @@ var (
 
 	cassandraConnectionString   string
 	cassandraKeyspace_Table     string
-	cassandraResultTimeStampKey string
+	cassandraRecordTimeStampKey string
 )
 
 var (
@@ -146,7 +146,7 @@ func init() {
 	// Export to cassandra
 	rootCmd.PersistentFlags().StringVar(&cassandraConnectionString, "host", "", "cassandra connection string")
 	rootCmd.PersistentFlags().StringVar(&cassandraKeyspace_Table, "table", "recon.sslsearch", "cassandra keyspace.table name to store data")
-	rootCmd.PersistentFlags().StringVar(&cassandraResultTimeStampKey, "result-ts-key", "", "cassandra default result timestamp key (defaults to YYYY-MM-DD)")
+	rootCmd.PersistentFlags().StringVar(&cassandraRecordTimeStampKey, "result-ts-key", "", "cassandra default result timestamp key (defaults to YYYY-MM-DD)")
 
 	// advanced input flags
 	rootCmd.PersistentFlags().IntVar(&cidrSuffixPerGoRoutine, "suffix", 4, "CIDR suffix per goroutine [each thread will scan 2^x IPs]")
