@@ -17,9 +17,25 @@ func SaveResultsToDisk(resultChan chan *CertResult, resultWg *sync.WaitGroup, ou
 			log.WithFields(logrus.Fields{"state": "save", "subject": result.Subject, "SANs": fmt.Sprintf("%s", result.SANs)}).Error("error saving result to disk")
 		}
 		if consoleout {
-			log.WithFields(logrus.Fields{"state": "save", "subject": result.Subject, "SANs": fmt.Sprintf("%s", result.SANs), "jarm": result.JARM, "server": result.ServerHeader}).Info(result.RemoteAddr)
+			log.WithFields(
+				logrus.Fields{
+					"state":   "save",
+					"cloud":   result.CSP,
+					"region":  result.Region,
+					"subject": result.Subject,
+					"SANs":    fmt.Sprintf("%s", result.SANs),
+					"jarm":    result.JARM,
+					"server":  result.ServerHeader}).Info(result.RemoteAddr)
 		} else {
-			log.WithFields(logrus.Fields{"state": "save", "subject": result.Subject, "SANs": fmt.Sprintf("%s", result.SANs), "jarm": result.JARM, "server": result.ServerHeader}).Debug(result.RemoteAddr)
+			log.WithFields(
+				logrus.Fields{
+					"state":   "save",
+					"cloud":   result.CSP,
+					"region":  result.Region,
+					"subject": result.Subject,
+					"SANs":    fmt.Sprintf("%s", result.SANs),
+					"jarm":    result.JARM,
+					"server":  result.ServerHeader}).Debug(result.RemoteAddr)
 		}
 	}
 }
