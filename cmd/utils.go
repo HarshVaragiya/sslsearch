@@ -60,8 +60,8 @@ func UpdateLogLevel() {
 }
 
 func PerformOutputChecks() {
-	if outFileName == "" && cassandraConnectionString == "" {
-		log.WithFields(logrus.Fields{"state": "main"}).Fatal("output file / cassandra connection string must be supplied!")
+	if outFileName == "" && cassandraConnectionString == "" && elasticsearchHost == "" {
+		log.WithFields(logrus.Fields{"state": "main"}).Fatal("output file / cassandra / elasticsearch connection string must be supplied!")
 	}
 	if outFileName != "" {
 		if _, err := os.Stat(outFileName); err == nil {
@@ -72,6 +72,9 @@ func PerformOutputChecks() {
 	}
 	if cassandraRecordTimeStampKey == "" {
 		cassandraRecordTimeStampKey = GetRecordTimestampKey()
+	}
+	if elasticsearchIndex == "" {
+		elasticsearchIndex = fmt.Sprintf("sslsearch-%s", GetRecordTimestampKey())
 	}
 }
 
@@ -168,7 +171,10 @@ func RunScan(cidrChan chan CidrRange) {
 	// save results to disk
 	resultWg := &sync.WaitGroup{}
 	resultWg.Add(1)
-	go ExportResultsToCassandra(enrichedResultChan, resultWg, consoleOut)
+
+	go ExportResultsToElasticsearch(enrichedResultChan, resultWg, consoleOut)
+	//go ExportResultsToCassandra(enrichedResultChan, resultWg, consoleOut)
+
 	go PrintProgressToConsole(consoleRefreshMs)
 
 	// wait for everything to finish!
