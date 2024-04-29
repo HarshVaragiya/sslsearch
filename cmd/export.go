@@ -16,12 +16,16 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func SaveResultsToDisk(resultChan chan *CertResult, resultWg *sync.WaitGroup, outFile *os.File, consoleout bool) {
+func SaveResultsToDisk(resultChan chan *CertResult, resultWg *sync.WaitGroup, outFileName string, consoleout bool) {
+	outFile, err := os.OpenFile(outFileName, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+	if err != nil {
+		log.WithFields(logrus.Fields{"state": "save", "errmsg": err}).Fatalf("error opening output file")
+	}
 	defer resultWg.Done()
 	enc := json.NewEncoder(outFile)
 	for result := range resultChan {
 		if err := enc.Encode(result); err != nil {
-			log.WithFields(logrus.Fields{"state": "save", "subject": result.Subject, "SANs": fmt.Sprintf("%s", result.SANs)}).Error("error saving result to disk")
+			log.WithFields(logrus.Fields{"state": "save", "subject": result.Subject, "SANs": fmt.Sprintf("%s", result.SANs), "errmsg": err}).Error("error saving result to disk")
 		}
 		if consoleout {
 			logToConsole(result)
@@ -34,7 +38,8 @@ func SaveResultsToDisk(resultChan chan *CertResult, resultWg *sync.WaitGroup, ou
 					"subject": result.Subject,
 					"SANs":    fmt.Sprintf("%s", result.SANs),
 					"jarm":    result.JARM,
-					"server":  result.ServerHeader}).Debug(result.RemoteAddr)
+					"port":    result.Port,
+					"server":  result.ServerHeader}).Debug(result.Ip)
 		}
 	}
 }
@@ -89,8 +94,8 @@ func ExportResultsToCassandra(resultChan chan *CertResult, resultWg *sync.WaitGr
 
 func insertRecord(session *gocql.Session, tableName string, record_ts string, result *CertResult) error {
 	query := session.Query(
-		fmt.Sprintf("INSERT INTO %s (record_ts, csp, region, remote_addr, subject, scan_ts, issuer, sans, server_header, jarm, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", tableName),
-		record_ts, result.CSP, result.Region, result.RemoteAddr, result.Subject, result.Timestamp, result.Issuer, result.SANs, result.ServerHeader, result.JARM, result.Meta,
+		fmt.Sprintf("INSERT INTO %s (record_ts, csp, region, ip, port, subject, scan_ts, issuer, sans, server_header, jarm, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", tableName),
+		record_ts, result.CSP, result.Region, result.Ip, result.Port, result.Subject, result.Timestamp, result.Issuer, result.SANs, result.ServerHeader, result.JARM, result.Meta,
 	)
 	if err := query.Exec(); err != nil {
 		return fmt.Errorf("failed to execute query: %v", err)
@@ -107,5 +112,6 @@ func logToConsole(result *CertResult) {
 			"subject": result.Subject,
 			"SANs":    fmt.Sprintf("%s", result.SANs),
 			"jarm":    result.JARM,
-			"server":  result.ServerHeader}).Info(result.RemoteAddr)
+			"port":    result.Port,
+			"server":  result.ServerHeader}).Info(result.Ip)
 }

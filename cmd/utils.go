@@ -172,8 +172,9 @@ func RunScan(cidrChan chan CidrRange) {
 	resultWg := &sync.WaitGroup{}
 	resultWg.Add(1)
 
-	go ExportResultsToElasticsearch(enrichedResultChan, resultWg, consoleOut)
-	//go ExportResultsToCassandra(enrichedResultChan, resultWg, consoleOut)
+	// go ExportResultsToElasticsearch(enrichedResultChan, resultWg, consoleOut)
+	// go ExportResultsToCassandra(enrichedResultChan, resultWg, consoleOut)
+	go SaveResultsToDisk(resultChan, resultWg, outFileName, consoleOut)
 
 	go PrintProgressToConsole(consoleRefreshMs)
 
@@ -246,12 +247,12 @@ func ServerHeaderEnrichmentThread(ctx context.Context, rawResultChan, enrichedRe
 	defer wg.Done()
 	log.WithFields(logrus.Fields{"state": "enrichment"}).Debug("server header enrichment thread starting")
 	for rawResult := range rawResultChan {
-		if header, err := GrabServerHeaderForRemote(rawResult.RemoteAddr); err == nil {
+		if header, err := GrabServerHeaderForRemote(getRemoteAddrString(rawResult.Ip, rawResult.Port)); err == nil {
 			rawResult.ServerHeader = header
-			log.WithFields(logrus.Fields{"state": "enrichment", "remote": rawResult.RemoteAddr}).Debugf("Server: %v", header)
+			log.WithFields(logrus.Fields{"state": "enrichment", "remote": getRemoteAddrString(rawResult.Ip, rawResult.Port)}).Debugf("Server: %v", header)
 		} else {
 			rawResult.ServerHeader = header
-			log.WithFields(logrus.Fields{"state": "enrichment", "remote": rawResult.RemoteAddr, "errmsg": err.Error()}).Tracef("Server: %v ", header)
+			log.WithFields(logrus.Fields{"state": "enrichment", "remote": getRemoteAddrString(rawResult.Ip, rawResult.Port), "errmsg": err.Error()}).Tracef("Server: %v ", header)
 		}
 		enrichedResultChan <- rawResult
 	}
@@ -262,12 +263,12 @@ func JarmFingerprintEnrichmentThread(ctx context.Context, rawResultChan, enriche
 	defer wg.Done()
 	log.WithFields(logrus.Fields{"state": "enrichment"}).Debug("JARM Fingerprint enrichment thread exiting")
 	for rawResult := range rawResultChan {
-		if jarmFingerprint, err := GetJARMFingerprint(rawResult.RemoteAddr); err == nil {
+		if jarmFingerprint, err := GetJARMFingerprint(getRemoteAddrString(rawResult.Ip, rawResult.Port)); err == nil {
 			rawResult.JARM = jarmFingerprint
-			log.WithFields(logrus.Fields{"state": "enrichment", "remote": rawResult.RemoteAddr}).Debugf("JARM Fingerprint: %v", jarmFingerprint)
+			log.WithFields(logrus.Fields{"state": "enrichment", "remote": getRemoteAddrString(rawResult.Ip, rawResult.Port)}).Debugf("JARM Fingerprint: %v", jarmFingerprint)
 		} else {
 			rawResult.JARM = jarmFingerprint
-			log.WithFields(logrus.Fields{"state": "enrichment", "remote": rawResult.RemoteAddr, "errmsg": err.Error()}).Tracef("JARM Fingerprint: %v ", jarmFingerprint)
+			log.WithFields(logrus.Fields{"state": "enrichment", "remote": getRemoteAddrString(rawResult.Ip, rawResult.Port), "errmsg": err.Error()}).Tracef("JARM Fingerprint: %v ", jarmFingerprint)
 		}
 		enrichedResultChan <- rawResult
 	}

@@ -7,3 +7,5 @@ linux:	commons
 
 darwin: commons
 	GOOS=darwin CGO_ENABLED=0 go build -o bin/sslsearch_darwin .
+
+all: linux darwin

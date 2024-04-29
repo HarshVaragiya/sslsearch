@@ -27,7 +27,8 @@ type CidrRange struct {
 }
 
 type CertResult struct {
-	RemoteAddr   string    `json:"remote"`
+	Ip           string    `json:"ip"`
+	Port         string    `json:"port"`
 	Subject      string    `json:"subject"`
 	Issuer       string    `json:"issuer"`
 	SANs         []string  `json:"SANs"`
