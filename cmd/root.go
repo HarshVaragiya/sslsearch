@@ -50,12 +50,15 @@ var (
 	jarmFingerptintThreadCount int
 
 	// Export Configuration
-	outFileName string
-	consoleOut  bool
-
+	outFileName                 string
+	consoleOut                  bool
 	cassandraConnectionString   string
 	cassandraKeyspace_Table     string
 	cassandraRecordTimeStampKey string
+	elasticsearchHost           string
+	elasticsearchUsername       string
+	elasticsearchPassword       string
+	elasticsearchIndex          string
 )
 
 var (
@@ -144,9 +147,15 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&outFileName, "output", "o", "", "output file on disk")
 
 	// Export to cassandra
-	rootCmd.PersistentFlags().StringVar(&cassandraConnectionString, "host", "", "cassandra connection string")
+	rootCmd.PersistentFlags().StringVar(&cassandraConnectionString, "cassandra", "", "cassandra connection string")
 	rootCmd.PersistentFlags().StringVar(&cassandraKeyspace_Table, "table", "recon.sslsearch", "cassandra keyspace.table name to store data")
 	rootCmd.PersistentFlags().StringVar(&cassandraRecordTimeStampKey, "result-ts-key", "", "cassandra default result timestamp key (defaults to YYYY-MM-DD)")
+
+	// Export to elasticsearch
+	rootCmd.PersistentFlags().StringVar(&elasticsearchHost, "elasticsearch", "", "elasticsearch host where data will be sent")
+	rootCmd.PersistentFlags().StringVar(&elasticsearchUsername, "elastic-username", "", "elasticsearch username for authentication")
+	rootCmd.PersistentFlags().StringVar(&elasticsearchPassword, "elastic-password", "", "elasticsearch password for authentication")
+	rootCmd.PersistentFlags().StringVar(&elasticsearchIndex, "index", "", "elasticsearch index where data will be stored (default: sslsearch-YYYY-MM-DD)")
 
 	// advanced input flags
 	rootCmd.PersistentFlags().IntVar(&cidrSuffixPerGoRoutine, "suffix", 4, "CIDR suffix per goroutine [each thread will scan 2^x IPs]")

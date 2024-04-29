@@ -1,13 +1,17 @@
 package cmd
 
 import (
+	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 	"sync"
 	"time"
 
+	elasticsearch "github.com/elastic/go-elasticsearch/v8"
 	"github.com/gocql/gocql"
 	"github.com/sirupsen/logrus"
 )
@@ -33,6 +37,32 @@ func SaveResultsToDisk(resultChan chan *CertResult, resultWg *sync.WaitGroup, ou
 					"server":  result.ServerHeader}).Debug(result.RemoteAddr)
 		}
 	}
+}
+
+func ExportResultsToElasticsearch(resultChan chan *CertResult, resultWg *sync.WaitGroup, consoleout bool) {
+	defer resultWg.Done()
+	client, err := elasticsearch.NewTypedClient(elasticsearch.Config{
+		Addresses:     []string{elasticsearchHost},
+		Username:      elasticsearchUsername,
+		Password:      elasticsearchPassword,
+		EnableMetrics: true,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+		},
+	})
+	if err != nil {
+		log.Fatalf("error connecting to elasticsearch. error = %v", err)
+	}
+	if _, err := client.Indices.Create(elasticsearchIndex).Do(context.TODO()); err != nil {
+		log.Fatalf("error creating elasticsearch index. error = %v", err)
+	}
+	log.Infof("exporting to elasticsearch on %s index: %s", elasticsearchHost, elasticsearchIndex)
+	for result := range resultChan {
+		client.Index(elasticsearchIndex).Request(result).Do(context.TODO())
+	}
+
 }
 
 func ExportResultsToCassandra(resultChan chan *CertResult, resultWg *sync.WaitGroup, consoleout bool) {
