@@ -33,7 +33,7 @@ func ScanCertificatesInCidr(ctx context.Context, cidrChan chan CidrRange, ports 
 			for ip := ip.Mask(ipNet.Mask); ipNet.Contains(ip); incrementIP(ip) {
 				for _, port := range ports {
 					remote := getRemoteAddrString(ip.String(), port)
-					result, err := ScanRemote(ctx, remote, keywordRegex)
+					result, err := ScanRemote(ctx, ip, port, keywordRegex)
 					if err != nil {
 						log.WithFields(logrus.Fields{"state": "deepscan", "remote": remote, "errmsg": err.Error()}).Tracef("error")
 						continue
@@ -53,7 +53,8 @@ func ScanCertificatesInCidr(ctx context.Context, cidrChan chan CidrRange, ports 
 	}
 }
 
-func ScanRemote(ctx context.Context, remote string, keywordRegex *regexp.Regexp) (*CertResult, error) {
+func ScanRemote(ctx context.Context, ip net.IP, port string, keywordRegex *regexp.Regexp) (*CertResult, error) {
+	remote := getRemoteAddrString(ip.String(), port)
 	log.WithFields(logrus.Fields{"state": "deepscan", "remote": remote}).Tracef("scanning")
 	select {
 	case <-ctx.Done():
@@ -81,10 +82,11 @@ func ScanRemote(ctx context.Context, remote string, keywordRegex *regexp.Regexp)
 		if subjectMatch || sanMatch {
 			totalFindings += 1
 			return &CertResult{
-				RemoteAddr: remote,
-				Subject:    certs[0].Subject.CommonName,
-				Issuer:     certs[0].Issuer.CommonName,
-				SANs:       certs[0].DNSNames,
+				Ip:      ip.String(),
+				Port:    port,
+				Subject: certs[0].Subject.CommonName,
+				Issuer:  certs[0].Issuer.CommonName,
+				SANs:    certs[0].DNSNames,
 			}, nil
 		}
 		return nil, errNoMatch
