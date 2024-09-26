@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"time"
 )
 
 const (
@@ -26,13 +27,15 @@ type CidrRange struct {
 }
 
 type CertResult struct {
-	RemoteAddr   string   `json:"remote"`
-	Subject      string   `json:"subject"`
-	Issuer       string   `json:"issuer"`
-	SANs         []string `json:"SANs"`
-	ServerHeader string   `json:"server"`
-	JARM         string   `json:"jarm"`
-	CSP          string   `json:"cloud"`
-	Region       string   `json:"region"`
-	Meta         string   `json:"metadata"`
+	Ip           string    `json:"ip"`
+	Port         string    `json:"port"`
+	Subject      string    `json:"subject"`
+	Issuer       string    `json:"issuer"`
+	SANs         []string  `json:"SANs"`
+	ServerHeader string    `json:"server"`
+	JARM         string    `json:"jarm"`
+	CSP          string    `json:"cloud"`
+	Region       string    `json:"region"`
+	Meta         string    `json:"metadata"`
+	Timestamp    time.Time `json:"timestamp"`
 }

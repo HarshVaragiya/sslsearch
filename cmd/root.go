@@ -27,6 +27,7 @@ import (
 	"net"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -55,7 +56,12 @@ var (
 
 	cassandraConnectionString   string
 	cassandraKeyspace_Table     string
-	cassandraResultTimeStampKey string
+	cassandraRecordTimeStampKey string
+
+	elasticsearchHost     string
+	elasticsearchUsername string
+	elasticsearchPassword string
+	elasticsearchIndex    string
 )
 
 var (
@@ -64,10 +70,11 @@ var (
 	cidrRangesToScan  = 0
 	cidrRangesScanned = 0
 	totalIpsScanned   = 0
+	targetScanRate    = atomic.Int64{}
 	totalFindings     = 0
 	jarmRetryCount    = 3
 	tcpTimeout        = 10
-	consoleRefreshMs  = 1000
+	consoleRefreshMs  = 5000
 
 	httpClientPool = sync.Pool{
 		New: func() interface{} {
@@ -144,9 +151,15 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&outFileName, "output", "o", "", "output file on disk")
 
 	// Export to cassandra
-	rootCmd.PersistentFlags().StringVar(&cassandraConnectionString, "host", "", "cassandra connection string")
+	rootCmd.PersistentFlags().StringVar(&cassandraConnectionString, "cassandra", "", "cassandra connection string")
 	rootCmd.PersistentFlags().StringVar(&cassandraKeyspace_Table, "table", "recon.sslsearch", "cassandra keyspace.table name to store data")
-	rootCmd.PersistentFlags().StringVar(&cassandraResultTimeStampKey, "result-ts-key", "", "cassandra default result timestamp key (defaults to YYYY-MM-DD)")
+	rootCmd.PersistentFlags().StringVar(&cassandraRecordTimeStampKey, "result-ts-key", "", "cassandra default result timestamp key (defaults to YYYY-MM-DD)")
+
+	// Export to elasticsearch
+	rootCmd.PersistentFlags().StringVar(&elasticsearchHost, "elasticsearch", "", "elasticsearch host where data will be sent")
+	rootCmd.PersistentFlags().StringVar(&elasticsearchUsername, "elastic-username", "", "elasticsearch username for authentication")
+	rootCmd.PersistentFlags().StringVar(&elasticsearchPassword, "elastic-password", "", "elasticsearch password for authentication")
+	rootCmd.PersistentFlags().StringVar(&elasticsearchIndex, "index", "", "elasticsearch index where data will be stored (default: sslsearch-YYYY-MM-DD)")
 
 	// advanced input flags
 	rootCmd.PersistentFlags().IntVar(&cidrSuffixPerGoRoutine, "suffix", 4, "CIDR suffix per goroutine [each thread will scan 2^x IPs]")

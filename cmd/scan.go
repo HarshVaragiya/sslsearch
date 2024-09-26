@@ -33,7 +33,7 @@ func ScanCertificatesInCidr(ctx context.Context, cidrChan chan CidrRange, ports 
 			for ip := ip.Mask(ipNet.Mask); ipNet.Contains(ip); incrementIP(ip) {
 				for _, port := range ports {
 					remote := getRemoteAddrString(ip.String(), port)
-					result, err := ScanRemote(ctx, remote, keywordRegex)
+					result, err := ScanRemote(ctx, ip, port, keywordRegex)
 					if err != nil {
 						log.WithFields(logrus.Fields{"state": "deepscan", "remote": remote, "errmsg": err.Error()}).Tracef("error")
 						continue
@@ -41,6 +41,7 @@ func ScanCertificatesInCidr(ctx context.Context, cidrChan chan CidrRange, ports 
 						result.CSP = cidr.CSP
 						result.Region = cidr.Region
 						result.Meta = cidr.Meta
+						result.Timestamp = time.Now()
 						resultChan <- result
 					}
 				}
@@ -52,7 +53,8 @@ func ScanCertificatesInCidr(ctx context.Context, cidrChan chan CidrRange, ports 
 	}
 }
 
-func ScanRemote(ctx context.Context, remote string, keywordRegex *regexp.Regexp) (*CertResult, error) {
+func ScanRemote(ctx context.Context, ip net.IP, port string, keywordRegex *regexp.Regexp) (*CertResult, error) {
+	remote := getRemoteAddrString(ip.String(), port)
 	log.WithFields(logrus.Fields{"state": "deepscan", "remote": remote}).Tracef("scanning")
 	select {
 	case <-ctx.Done():
@@ -66,6 +68,7 @@ func ScanRemote(ctx context.Context, remote string, keywordRegex *regexp.Regexp)
 		statsLock.Lock()
 		defer statsLock.Unlock()
 		totalIpsScanned += 1
+		targetScanRate.Add(1)
 		if err != nil {
 			return nil, errConn
 		}
@@ -80,10 +83,11 @@ func ScanRemote(ctx context.Context, remote string, keywordRegex *regexp.Regexp)
 		if subjectMatch || sanMatch {
 			totalFindings += 1
 			return &CertResult{
-				RemoteAddr: remote,
-				Subject:    certs[0].Subject.CommonName,
-				Issuer:     certs[0].Issuer.CommonName,
-				SANs:       certs[0].DNSNames,
+				Ip:      ip.String(),
+				Port:    port,
+				Subject: certs[0].Subject.CommonName,
+				Issuer:  certs[0].Issuer.CommonName,
+				SANs:    certs[0].DNSNames,
 			}, nil
 		}
 		return nil, errNoMatch
@@ -105,7 +109,10 @@ func Summarize(start, stop time.Time) {
 func PrintProgressToConsole(refreshInterval int) {
 	for {
 		statsLock.RLock()
-		fmt.Printf("Progress: CIDRs [ %v / %v ]  Findings: %v, TotalIPs Scanned : %v           \r", cidrRangesScanned, cidrRangesToScan, totalFindings, totalIpsScanned)
+		targetsScannedSinceRefresh := targetScanRate.Load()
+		scanRate := float64(1000*targetsScannedSinceRefresh) / float64(refreshInterval)
+		targetScanRate.Store(0)
+		fmt.Printf("Progress: CIDRs [ %v / %v ]  Findings: %v TotalIPs Scanned: %v | Rate: %.2f  ips/sec         \r", cidrRangesScanned, cidrRangesToScan, totalFindings, totalIpsScanned, scanRate)
 		statsLock.RUnlock()
 		time.Sleep(time.Millisecond * time.Duration(int64(refreshInterval)))
 	}

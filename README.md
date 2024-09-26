@@ -7,6 +7,9 @@ Details - https://medium.com/@harsh8v/ssl-search-a-tool-to-identify-infrastructu
 
 
 ### Installation
+
+- Currently the only way to use this tool is to build the binary using golang. 
+
 ```bash
 go install github.com/HarshVaragiya/sslsearch@latest
 ```
@@ -24,7 +27,7 @@ go install github.com/HarshVaragiya/sslsearch@latest
 | Digital Ocean               | NL_NL-NH_Amsterdam    | ✅   | ✅            |
 | Google Cloud Platform       | us-west4              | ✅   | ✅            |
 | Oracle Cloud Infrastructure | ca-montreal-1         | ✅   | ✅            |
-| Raw CIDR / IP Range         | -                     | ✅   | ✅            |                            |                       |      |               |
+| Raw CIDR / IP Range         | -                     | ✅   | ✅            |
 
 
 ## Potential uses 
@@ -34,6 +37,13 @@ go install github.com/HarshVaragiya/sslsearch@latest
 4. Scanning the whole Internet / Country's CIDRs & Collecting JARM fingerprints / Server Headers along with SSL certificate information.
 5. Finding Mail / RDP / Other services belonging to a target that use x509 certificates to secure connections. 
 
+
+## Future plans (not a roadmap)
+1. Export integrations for cassandra cluster, redis, kafka and elasticsearch.
+2. QOL - Split codebase into different packages like libexport, libscan for better code quality.
+3. Certificate information like issuer, signature, chain etc to also be stored for analysis.
+4. CI/CD Setup with binary package available for download.
+5. Integration tests with test docker containers maybe. 
 
 
 ## References
