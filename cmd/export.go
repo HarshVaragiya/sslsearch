@@ -65,7 +65,9 @@ func ExportResultsToElasticsearch(resultChan chan *CertResult, resultWg *sync.Wa
 	}
 	log.Infof("exporting to elasticsearch on %s index: %s", elasticsearchHost, elasticsearchIndex)
 	for result := range resultChan {
-		client.Index(elasticsearchIndex).Request(result).Do(context.TODO())
+		if _, err = client.Index(elasticsearchIndex).Request(result).Do(context.TODO()); err != nil {
+			log.Errorf("error exporting result to elasticsearch. error = %v", err)
+		}
 	}
 
 }
