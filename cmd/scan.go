@@ -68,6 +68,7 @@ func ScanRemote(ctx context.Context, ip net.IP, port string, keywordRegex *regex
 		statsLock.Lock()
 		defer statsLock.Unlock()
 		totalIpsScanned += 1
+		targetScanRate.Add(1)
 		if err != nil {
 			return nil, errConn
 		}
@@ -108,7 +109,10 @@ func Summarize(start, stop time.Time) {
 func PrintProgressToConsole(refreshInterval int) {
 	for {
 		statsLock.RLock()
-		fmt.Printf("Progress: CIDRs [ %v / %v ]  Findings: %v, TotalIPs Scanned : %v           \r", cidrRangesScanned, cidrRangesToScan, totalFindings, totalIpsScanned)
+		targetsScannedSinceRefresh := targetScanRate.Load()
+		scanRate := float64(1000*targetsScannedSinceRefresh) / float64(refreshInterval)
+		targetScanRate.Store(0)
+		fmt.Printf("Progress: CIDRs [ %v / %v ]  Findings: %v TotalIPs Scanned: %v | Rate: %.2f  ips/sec         \r", cidrRangesScanned, cidrRangesToScan, totalFindings, totalIpsScanned, scanRate)
 		statsLock.RUnlock()
 		time.Sleep(time.Millisecond * time.Duration(int64(refreshInterval)))
 	}

@@ -27,6 +27,7 @@ import (
 	"net"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -50,15 +51,17 @@ var (
 	jarmFingerptintThreadCount int
 
 	// Export Configuration
-	outFileName                 string
-	consoleOut                  bool
+	outFileName string
+	consoleOut  bool
+
 	cassandraConnectionString   string
 	cassandraKeyspace_Table     string
 	cassandraRecordTimeStampKey string
-	elasticsearchHost           string
-	elasticsearchUsername       string
-	elasticsearchPassword       string
-	elasticsearchIndex          string
+
+	elasticsearchHost     string
+	elasticsearchUsername string
+	elasticsearchPassword string
+	elasticsearchIndex    string
 )
 
 var (
@@ -67,10 +70,11 @@ var (
 	cidrRangesToScan  = 0
 	cidrRangesScanned = 0
 	totalIpsScanned   = 0
+	targetScanRate    = atomic.Int64{}
 	totalFindings     = 0
 	jarmRetryCount    = 3
 	tcpTimeout        = 10
-	consoleRefreshMs  = 1000
+	consoleRefreshMs  = 5000
 
 	httpClientPool = sync.Pool{
 		New: func() interface{} {

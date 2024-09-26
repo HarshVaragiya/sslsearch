@@ -21,8 +21,21 @@ THE SOFTWARE.
 */
 package main
 
-import "github.com/HarshVaragiya/sslsearch/cmd"
+import (
+	"github.com/HarshVaragiya/sslsearch/cmd"
+	"os"
+	"runtime/pprof"
+)
 
 func main() {
+	f, err := os.Create("sslsearch.prof")
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+	if err := pprof.StartCPUProfile(f); err != nil {
+		panic(err)
+	}
+	defer pprof.StopCPUProfile()
 	cmd.Execute()
 }

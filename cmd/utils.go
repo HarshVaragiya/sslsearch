@@ -61,20 +61,22 @@ func UpdateLogLevel() {
 
 func PerformOutputChecks() {
 	if outFileName == "" && cassandraConnectionString == "" && elasticsearchHost == "" {
-		log.WithFields(logrus.Fields{"state": "main"}).Fatal("output file / cassandra / elasticsearch connection string must be supplied!")
+		log.WithFields(logrus.Fields{"state": "checks"}).Fatal("output file / cassandra / elasticsearch connection string must be supplied!")
 	}
 	if outFileName != "" {
 		if _, err := os.Stat(outFileName); err == nil {
-			log.WithFields(logrus.Fields{"state": "main"}).Fatal("output file already exists!")
+			log.WithFields(logrus.Fields{"state": "checks"}).Fatal("output file already exists!")
 		} else if errors.Is(err, os.ErrNotExist) {
-			log.WithFields(logrus.Fields{"state": "main"}).Debugf("output file does not exist and will be created")
+			log.WithFields(logrus.Fields{"state": "checks"}).Debugf("output file does not exist and will be created")
 		}
 	}
 	if cassandraRecordTimeStampKey == "" {
 		cassandraRecordTimeStampKey = GetRecordTimestampKey()
+		log.WithFields(logrus.Fields{"state": "checks"}).Infof("cassandra output timestamp key: %s", cassandraRecordTimeStampKey)
 	}
 	if elasticsearchIndex == "" {
 		elasticsearchIndex = fmt.Sprintf("sslsearch-%s", GetRecordTimestampKey())
+		log.WithFields(logrus.Fields{"state": "checks"}).Infof("elasticsearch output index: %s", elasticsearchIndex)
 	}
 }
 
@@ -172,9 +174,9 @@ func RunScan(cidrChan chan CidrRange) {
 	resultWg := &sync.WaitGroup{}
 	resultWg.Add(1)
 
-	// go ExportResultsToElasticsearch(enrichedResultChan, resultWg, consoleOut)
+	go ExportResultsToElasticsearch(enrichedResultChan, resultWg, consoleOut)
 	// go ExportResultsToCassandra(enrichedResultChan, resultWg, consoleOut)
-	go SaveResultsToDisk(resultChan, resultWg, outFileName, consoleOut)
+	//go SaveResultsToDisk(resultChan, resultWg, outFileName, consoleOut)
 
 	go PrintProgressToConsole(consoleRefreshMs)
 
