@@ -1,11 +1,9 @@
-FROM almalinux:latest as builder
+FROM golang:alpine AS builder
 WORKDIR /app
 COPY . /app/
-ENV CGO_ENABLED 0
-ENV GOOS linux
-RUN yum install golang-bin make -y && make linux && yum clean all
+RUN apk add make && make linux
 
-FROM almalinux:minimal
+FROM alpine
 WORKDIR /app
 COPY --from=builder /app/bin/sslsearch_linux /app/sslsearch
 ENTRYPOINT ["/app/sslsearch"]
