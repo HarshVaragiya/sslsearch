@@ -115,9 +115,6 @@ SSL certificates. Do some initial recon for the findings if required.
 Initial Recon: 
 	1. Server Header Grabbing
 	2. JARM Fingerprinting`,
-	// Uncomment the following line if your bare application
-	// has an action associated with it:
-	// Run: func(cmd *cobra.Command, args []string) { },
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -140,8 +137,7 @@ func init() {
 	// when this action is called directly.
 
 	// refined input flags
-	rootCmd.PersistentFlags().StringVarP(&keywordRegexString, "keyword-regex", "k", "", "case insensitive keyword regex to search in subject or SAN (ex: .*amazon.* or .* which matches all)")
-	rootCmd.MarkPersistentFlagRequired("keyword-regex")
+	rootCmd.PersistentFlags().StringVarP(&keywordRegexString, "keyword-regex", "k", ".*", "case insensitive keyword regex to search in subject or SAN (ex: .*amazon.* or .* which matches all)")
 
 	rootCmd.PersistentFlags().StringVarP(&portsString, "ports", "p", "443", "ports to search")
 	rootCmd.PersistentFlags().IntVarP(&threadCount, "threads", "t", 1000, "number of parallel threads to use")
