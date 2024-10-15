@@ -44,23 +44,21 @@ var (
 	threadCount            int
 	cidrSuffixPerGoRoutine int
 
-	grabServerHeader           bool
-	grabJarmFingerprint        bool
 	serverHeaderThreadCount    int
-	jarmFingerptintThreadCount int
+	jarmFingerprintThreadCount int
 
 	// Export Configuration
-	outFileName string
-	consoleOut  bool
-
+	diskExport                  bool
+	diskFilePath                string
+	cassandraExport             bool
 	cassandraConnectionString   string
-	cassandraKeyspace_Table     string
+	cassandraKeyspaceDotTable   string
 	cassandraRecordTimeStampKey string
-
-	elasticsearchHost     string
-	elasticsearchUsername string
-	elasticsearchPassword string
-	elasticsearchIndex    string
+	elasticsearchExport         bool
+	elasticsearchHost           string
+	elasticsearchUsername       string
+	elasticsearchPassword       string
+	elasticsearchIndex          string
 )
 
 var (
@@ -141,41 +139,38 @@ func init() {
 
 	// refined input flags
 	rootCmd.PersistentFlags().StringVarP(&keywordRegexString, "keyword-regex", "k", ".*", "case insensitive keyword regex to search in subject or SAN (ex: .*amazon.* or .* which matches all)")
-
 	rootCmd.PersistentFlags().StringVarP(&portsString, "ports", "p", "443", "ports to search")
 	rootCmd.PersistentFlags().IntVarP(&threadCount, "threads", "t", 1000, "number of parallel threads to use")
 	rootCmd.PersistentFlags().IntVar(&consoleRefreshSeconds, "refresh", 5, "console progress refresh in seconds")
-
-	// Export to disk
-	rootCmd.PersistentFlags().StringVarP(&outFileName, "output", "o", "", "output file on disk")
-
-	// Export to cassandra
-	rootCmd.PersistentFlags().StringVar(&cassandraConnectionString, "cassandra", "", "cassandra connection string")
-	rootCmd.PersistentFlags().StringVar(&cassandraKeyspace_Table, "table", "recon.sslsearch", "cassandra keyspace.table name to store data")
-	rootCmd.PersistentFlags().StringVar(&cassandraRecordTimeStampKey, "result-ts-key", "", "cassandra default result timestamp key (defaults to YYYY-MM-DD)")
-
-	// Export to elasticsearch
-	rootCmd.PersistentFlags().StringVar(&elasticsearchHost, "elasticsearch", "", "elasticsearch host where data will be sent")
-	rootCmd.PersistentFlags().StringVar(&elasticsearchUsername, "elastic-username", "", "elasticsearch username for authentication")
-	rootCmd.PersistentFlags().StringVar(&elasticsearchPassword, "elastic-password", "", "elasticsearch password for authentication")
-	rootCmd.PersistentFlags().StringVar(&elasticsearchIndex, "index", "", "elasticsearch index where data will be stored (default: sslsearch-YYYY-MM-DD)")
-
-	// advanced input flags
+	rootCmd.PersistentFlags().BoolVarP(&debugFlag, "debug", "v", false, "enable debug logs")
 	rootCmd.PersistentFlags().IntVar(&cidrSuffixPerGoRoutine, "suffix", 4, "CIDR suffix per goroutine [each thread will scan 2^x IPs]")
 	rootCmd.PersistentFlags().IntVar(&tcpTimeout, "timeout", 10, "tcp connection timeout in seconds")
-	rootCmd.PersistentFlags().BoolVar(&consoleOut, "console-out", false, "actively print result JSON to console")
+
+	// Export to disk
+	rootCmd.PersistentFlags().BoolVar(&diskExport, "export.disk", false, "export findings to disk")
+	rootCmd.PersistentFlags().StringVarP(&diskFilePath, "export.disk.filename", "o", "", "output file name on disk")
+	rootCmd.MarkFlagsRequiredTogether("export.disk", "export.disk.filename")
+
+	// Export to cassandra
+	rootCmd.PersistentFlags().BoolVar(&cassandraExport, "export.cassandra", false, "export findings to cassandra")
+	rootCmd.PersistentFlags().StringVar(&cassandraConnectionString, "export.cassandra.connection-string", "", "cassandra connection string")
+	rootCmd.PersistentFlags().StringVar(&cassandraKeyspaceDotTable, "export.cassandra.table", "recon.sslsearch", "cassandra keyspace.table name to store data")
+	rootCmd.PersistentFlags().StringVar(&cassandraRecordTimeStampKey, "export.cassandra.result-ts-key", "", "cassandra default result timestamp key (defaults to YYYY-MM-DD)")
+	rootCmd.MarkFlagsRequiredTogether("export.cassandra", "export.cassandra.connection-string")
+
+	// Export to elasticsearch
+	rootCmd.PersistentFlags().BoolVar(&elasticsearchExport, "export.elastic", false, "export findings to elasticsearch")
+	rootCmd.PersistentFlags().StringVar(&elasticsearchHost, "export.elastic.host", "", "elasticsearch host where data will be sent")
+	rootCmd.PersistentFlags().StringVar(&elasticsearchUsername, "export.elastic.username", "", "elasticsearch username for authentication")
+	rootCmd.PersistentFlags().StringVar(&elasticsearchPassword, "export.elastic.password", "", "elasticsearch password for authentication")
+	rootCmd.PersistentFlags().StringVar(&elasticsearchIndex, "export.elastic.index", "", "elasticsearch index where data will be stored (default: sslsearch-YYYY-MM-DD)")
+	rootCmd.MarkFlagsRequiredTogether("export.elastic", "export.elastic.host", "export.elastic.username", "export.elastic.password")
+
+	rootCmd.MarkFlagsMutuallyExclusive("export.disk", "export.elastic", "export.cassandra")
 
 	// Recon flags
-	// Server Header enumeration
-	rootCmd.PersistentFlags().BoolVar(&grabServerHeader, "server-header", false, "attempt to enrich results by grabbing the https server header for results")
 	rootCmd.PersistentFlags().IntVar(&serverHeaderThreadCount, "server-header-threads", 40, "number of threads to use for server header result enrichment")
-
-	// JARM fingerprinting
-	rootCmd.PersistentFlags().BoolVar(&grabJarmFingerprint, "jarm", false, "attempt to enrich results by grabbing the JARM fingerprint")
 	rootCmd.PersistentFlags().IntVar(&jarmRetryCount, "jarm-retry-count", 3, "retry attempts for JARM fingerprint")
-	rootCmd.PersistentFlags().IntVar(&jarmFingerptintThreadCount, "jarm-threads", 40, "number of threads to use for JARM fingerprint enrichment (>200 might not be stable)")
-
-	// debugging
-	rootCmd.PersistentFlags().BoolVarP(&debugFlag, "debug", "v", false, "enable debug logs")
+	rootCmd.PersistentFlags().IntVar(&jarmFingerprintThreadCount, "jarm-threads", 40, "number of threads to use for JARM fingerprint enrichment (>200 might not be stable)")
 
 }

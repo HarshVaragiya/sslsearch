@@ -27,7 +27,7 @@ func PerformPreRunChecks(checkRegion bool) {
 	if checkRegion {
 		CheckRegionRegex()
 	}
-	log.WithFields(logrus.Fields{"state": "main"}).Info("sanity checks passed")
+	log.WithFields(logrus.Fields{"state": "main"}).Debugf("sanity checks passed")
 }
 
 func CheckInputParameters() {
@@ -56,21 +56,21 @@ func UpdateLogLevel() {
 }
 
 func PerformOutputChecks() {
-	if outFileName == "" && cassandraConnectionString == "" && elasticsearchHost == "" {
-		log.WithFields(logrus.Fields{"state": "checks"}).Fatal("output file / cassandra / elasticsearch connection string must be supplied!")
+	if !diskExport && !elasticsearchExport && !cassandraExport {
+		log.WithFields(logrus.Fields{"state": "checks"}).Fatal("export target disk / cassandra / elasticsearch must be configured")
 	}
-	if outFileName != "" {
-		if _, err := os.Stat(outFileName); err == nil {
+	if diskExport && diskFilePath != "" {
+		if _, err := os.Stat(diskFilePath); err == nil {
 			log.WithFields(logrus.Fields{"state": "checks"}).Fatal("output file already exists!")
 		} else if errors.Is(err, os.ErrNotExist) {
 			log.WithFields(logrus.Fields{"state": "checks"}).Debugf("output file does not exist and will be created")
 		}
 	}
-	if cassandraConnectionString != "" && cassandraRecordTimeStampKey == "" {
+	if cassandraExport && cassandraConnectionString != "" && cassandraRecordTimeStampKey == "" {
 		cassandraRecordTimeStampKey = getRecordKey()
 		log.WithFields(logrus.Fields{"state": "checks"}).Infof("cassandra output record key: %s", cassandraRecordTimeStampKey)
 	}
-	if elasticsearchHost != "" && elasticsearchIndex == "" {
+	if elasticsearchExport && elasticsearchHost != "" && elasticsearchIndex == "" {
 		elasticsearchIndex = fmt.Sprintf("sslsearch-%s", getRecordKey())
 		log.WithFields(logrus.Fields{"state": "checks"}).Infof("elasticsearch output index: %s", elasticsearchIndex)
 	}
@@ -101,7 +101,6 @@ func ScanCloudServiceProvider(ctx context.Context, csp string, cloudServiceProvi
 			}
 		}
 	}()
-
 	RunScan(cidrChan)
 }
 
@@ -109,7 +108,7 @@ func RunScan(cidrChan chan CidrRange) {
 	ports := strings.Split(portsString, ",")
 	log.WithFields(logrus.Fields{"state": "main"}).Infof("ports to be scanned: %s", ports)
 	resultChan := make(chan *CertResult, threadCount*2)
-	var enrichedResultChan chan *CertResult
+
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	defer cancelFunc()
 
@@ -134,58 +133,40 @@ func RunScan(cidrChan chan CidrRange) {
 		go ScanCertificatesInCidr(ctx, cidrChan, ports, resultChan, scanWg, keywordRegexString)
 	}
 
-	// start enrichment threads in the background with given options
-	enrichWg := &sync.WaitGroup{}
-	enrichedResultChan = resultChan
-	if grabServerHeader {
-		enrichWg.Add(1)
-		serverHeaderWg := &sync.WaitGroup{}
-		enrichedResultChan = ServerHeaderEnrichment(ctx, enrichedResultChan, serverHeaderThreadCount, serverHeaderWg)
-		go func(enrichedResultChan chan *CertResult, wg *sync.WaitGroup) {
-			wg.Wait()
-			close(enrichedResultChan)
-			enrichWg.Done()
-		}(enrichedResultChan, serverHeaderWg)
-	}
-	if grabJarmFingerprint {
-		enrichWg.Add(1)
-		jarmFingerprintWg := &sync.WaitGroup{}
-		enrichedResultChan = JARMFingerprintEnrichment(ctx, enrichedResultChan, jarmFingerptintThreadCount, jarmFingerprintWg)
-		go func(enrichedResultChan chan *CertResult, wg *sync.WaitGroup) {
-			wg.Wait()
-			close(enrichedResultChan)
-			enrichWg.Done()
-		}(enrichedResultChan, jarmFingerprintWg)
-	}
+	serverHeaderWg := &sync.WaitGroup{}
+	headerEnrichedResultsChan := ServerHeaderEnrichment(ctx, resultChan, serverHeaderThreadCount, serverHeaderWg)
+	jarmFingerprintWg := &sync.WaitGroup{}
+	enrichedResultChan := JARMFingerprintEnrichment(ctx, headerEnrichedResultsChan, jarmFingerprintThreadCount, jarmFingerprintWg)
 
-	// save results to disk
+	// export results
 	resultWg := &sync.WaitGroup{}
 	resultWg.Add(1)
-
-	tg, err := NewDiskTarget(outFileName)
-	if err != nil {
-		log.WithFields(logrus.Fields{"state": "main"}).Fatal("error creating disk target")
-	}
-	go tg.Export(ctx, resultChan, resultWg)
+	exportTarget := GetExportTarget()
+	go exportTarget.Export(enrichedResultChan, resultWg)
 
 	go PrintProgressToConsole(consoleRefreshSeconds)
 
-	// wait for everything to finish!
-	log.WithFields(logrus.Fields{"state": "main"}).Info("waiting for threads to finish scanning")
+	// wait for tls scanning to finish
+	log.WithFields(logrus.Fields{"state": "main"}).Info("waiting for tls scanner threads to finish scanning")
 	scanWg.Wait()
-	stopTime := time.Now()
 	close(resultChan)
 
-	// enrichment
-	log.WithFields(logrus.Fields{"state": "main"}).Info("waiting for enrichment threads to finish")
-	enrichWg.Wait()
-	log.WithFields(logrus.Fields{"state": "main"}).Info("enrichment threads finished")
+	// wait for enrichment to finish
+	log.WithFields(logrus.Fields{"state": "main"}).Info("waiting for server header enrichment threads to finish")
+	serverHeaderWg.Wait()
+	close(headerEnrichedResultsChan)
+	log.WithFields(logrus.Fields{"state": "main"}).Info("server header enrichment threads finished")
+	log.WithFields(logrus.Fields{"state": "main"}).Infof("waiting for jarm fingerprint enrichment threads to finish")
+	jarmFingerprintWg.Wait()
+	close(enrichedResultChan)
+	log.WithFields(logrus.Fields{"state": "main"}).Info("jarm fingerprint enrichment threads finished")
 
-	// save results to disk
-	log.WithFields(logrus.Fields{"state": "main"}).Info("saving results to disk ...")
+	// wait for export to finish
+	log.WithFields(logrus.Fields{"state": "main"}).Info("waiting for export threads to finish")
 	resultWg.Wait()
-	log.WithFields(logrus.Fields{"state": "main"}).Info("done writing results to disk")
+	log.WithFields(logrus.Fields{"state": "main"}).Info("done exporting to target")
 
+	stopTime := time.Now()
 	Summarize(startTime, stopTime)
 }
 
@@ -233,25 +214,23 @@ func SplitCIDR(cidrString CidrRange, suffixLenPerGoRoutine int, cidrChan chan Ci
 	return nil
 }
 
-func ServerHeaderEnrichmentThread(ctx context.Context, rawResultChan, enrichedResultChan chan *CertResult, wg *sync.WaitGroup) {
+func headerEnrichmentThread(ctx context.Context, rawResultChan, enrichedResultChan chan *CertResult, wg *sync.WaitGroup) {
 	defer wg.Done()
 	log.WithFields(logrus.Fields{"state": "enrichment"}).Debug("server header enrichment thread starting")
 	for rawResult := range rawResultChan {
-		if header, err := GrabServerHeaderForRemote(getRemoteAddrString(rawResult.Ip, rawResult.Port)); err == nil {
-			rawResult.ServerHeader = header
+		serverHeader, allHeaders, err := GrabServerHeaderForRemote(getRemoteAddrString(rawResult.Ip, rawResult.Port))
+		if err == nil {
 			serverHeadersGrabbed.Add(1)
-			log.WithFields(logrus.Fields{"state": "enrichment", "remote": getRemoteAddrString(rawResult.Ip, rawResult.Port)}).Debugf("Server: %v", header)
-		} else {
-			rawResult.ServerHeader = header
-			log.WithFields(logrus.Fields{"state": "enrichment", "remote": getRemoteAddrString(rawResult.Ip, rawResult.Port), "errmsg": err.Error()}).Tracef("Server: %v ", header)
 		}
+		rawResult.Server = serverHeader
+		rawResult.Headers = allHeaders
 		serverHeadersScanned.Add(1)
 		enrichedResultChan <- rawResult
 	}
 	log.WithFields(logrus.Fields{"state": "enrichment"}).Debug("server header enrichment thread exiting")
 }
 
-func JarmFingerprintEnrichmentThread(ctx context.Context, rawResultChan, enrichedResultChan chan *CertResult, wg *sync.WaitGroup) {
+func jarmFingerprintEnrichmentThread(ctx context.Context, rawResultChan, enrichedResultChan chan *CertResult, wg *sync.WaitGroup) {
 	defer wg.Done()
 	log.WithFields(logrus.Fields{"state": "enrichment"}).Debug("JARM Fingerprint enrichment thread exiting")
 	for rawResult := range rawResultChan {
@@ -269,7 +248,7 @@ func JarmFingerprintEnrichmentThread(ctx context.Context, rawResultChan, enriche
 	log.WithFields(logrus.Fields{"state": "enrichment"}).Debug("JARM Fingerprint enrichment thread exiting")
 }
 
-func GrabServerHeaderForRemote(remote string) (string, error) {
+func GrabServerHeaderForRemote(remote string) (string, map[string]string, error) {
 	client := httpClientPool.Get().(*fasthttp.Client)
 	defer httpClientPool.Put(client)
 	req := fasthttp.AcquireRequest()
@@ -278,10 +257,15 @@ func GrabServerHeaderForRemote(remote string) (string, error) {
 	defer fasthttp.ReleaseResponse(resp)
 	req.SetRequestURI(fmt.Sprintf("https://%s", remote))
 	err := client.Do(req, resp)
+	allHeaders := make(map[string]string)
 	if err != nil {
-		return "", err
+		return "", allHeaders, err
 	}
-	return string(resp.Header.Peek("Server")), nil
+	resp.Header.EnableNormalizing()
+	resp.Header.VisitAll(func(key, value []byte) {
+		allHeaders[string(key)] = string(value)
+	})
+	return string(resp.Header.Peek("Server")), allHeaders, nil
 }
 
 func GetJARMFingerprint(remote string) (string, error) {
