@@ -79,7 +79,7 @@ func (es *Elasticsearch) Export(resultChan chan *CertResult, resultWg *sync.Wait
 	if _, err := es.client.Indices.Create(elasticsearchIndex).Do(context.TODO()); err != nil {
 		log.WithFields(logrus.Fields{"state": "elastic"}).Errorf("error creating elasticsearch index. error = %v", err)
 	}
-	log.WithFields(logrus.Fields{"state": "elastic"}).Infof("exporting to elasticsearch on %s index: %s", elasticsearchHost, elasticsearchIndex)
+	log.WithFields(logrus.Fields{"state": "elastic"}).Infof("exporting to elasticsearch index: %s", elasticsearchIndex)
 	for result := range resultChan {
 		if _, err := es.client.Index(elasticsearchIndex).Request(result).Do(context.TODO()); err != nil {
 			log.WithFields(logrus.Fields{"state": "elastic"}).Errorf("error exporting result to elasticsearch. error = %v", err)
