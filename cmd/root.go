@@ -78,6 +78,8 @@ var (
 	tcpTimeout              = 10
 	consoleRefreshSeconds   = 5000
 
+	state = 1
+
 	httpClientPool = sync.Pool{
 		New: func() interface{} {
 			return &fasthttp.Client{
