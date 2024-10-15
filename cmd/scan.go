@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"github.com/jedib0t/go-pretty/progress"
 	"net"
 	"regexp"
 	"sync"
@@ -115,6 +116,41 @@ func PrintProgressToConsole(refreshInterval int) {
 			serverHeadersGrabbed.Load(), serverHeadersScanned.Load(),
 			jarmFingerprintsGrabbed.Load(), jarmFingerprintsScanned.Load(),
 			resultsExported.Load(), resultsProcessed.Load(), scanRate)
+		time.Sleep(time.Second * time.Duration(int64(refreshInterval)))
+	}
+}
+
+func ProgressBar(refreshInterval int) {
+	p := progress.NewWriter()
+	defer p.Stop()
+	p.SetMessageWidth(24)
+	p.SetNumTrackersExpected(4)
+	p.SetStyle(progress.StyleDefault)
+	p.SetTrackerLength(40)
+	p.SetTrackerPosition(progress.PositionRight)
+	p.SetUpdateFrequency(time.Second * 1)
+	p.SetAutoStop(false)
+	p.Style().Colors = progress.StyleColorsExample
+	go p.Render()
+	cidrTracker := progress.Tracker{Message: "CIDR Ranges Scanned"}
+	headerTracker := progress.Tracker{Message: "Headers Grabbed"}
+	jarmTracker := progress.Tracker{Message: "JARM Fingerprints"}
+	exportTracker := progress.Tracker{Message: "Exported Results"}
+	log.Printf("starting progress bar thread")
+	p.AppendTrackers([]*progress.Tracker{&cidrTracker, &headerTracker, &jarmTracker, &exportTracker})
+	for {
+		cidrTracker.Total = cidrRangesToScan.Load()
+		cidrTracker.SetValue(cidrRangesScanned.Load())
+		headerTracker.Total = totalFindings.Load()
+		headerTracker.SetValue(serverHeadersScanned.Load())
+		jarmTracker.Total = serverHeadersScanned.Load()
+		jarmTracker.SetValue(jarmFingerprintsScanned.Load())
+		exportTracker.Total = jarmFingerprintsScanned.Load()
+		exportTracker.SetValue(resultsExported.Load())
+		if exportTracker.IsDone() && state != 4 {
+			// progress bar does not update number after it is marked "done" so keep it "undone" till we wait for export to finish
+			exportTracker.SetValue(exportTracker.Total - 1)
+		}
 		time.Sleep(time.Second * time.Duration(int64(refreshInterval)))
 	}
 }

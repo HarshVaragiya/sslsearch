@@ -120,6 +120,7 @@ func RunScan(cidrChan chan CidrRange) {
 		log.WithFields(logrus.Fields{"state": "main"}).Infof("received %v ... cancelling context.", s.String())
 		log.WithFields(logrus.Fields{"state": "main"}).Infof("waiting for threads to exit ...")
 		cancelFunc()
+		fmt.Printf("\n\n\n\n\n\n")
 		s = <-signals
 		log.WithFields(logrus.Fields{"state": "main"}).Fatalf("forcing exit due to %v", s.String())
 	}()
@@ -144,28 +145,35 @@ func RunScan(cidrChan chan CidrRange) {
 	exportTarget := GetExportTarget()
 	go exportTarget.Export(enrichedResultChan, resultWg)
 
-	go PrintProgressToConsole(consoleRefreshSeconds)
+	go ProgressBar(consoleRefreshSeconds)
+	//go PrintProgressToConsole(consoleRefreshSeconds)
 
 	// wait for tls scanning to finish
+	state = 1
 	log.WithFields(logrus.Fields{"state": "main"}).Info("waiting for tls scanner threads to finish scanning")
 	scanWg.Wait()
 	close(resultChan)
 
 	// wait for enrichment to finish
+	state = 2
 	log.WithFields(logrus.Fields{"state": "main"}).Info("waiting for server header enrichment threads to finish")
 	serverHeaderWg.Wait()
 	close(headerEnrichedResultsChan)
 	log.WithFields(logrus.Fields{"state": "main"}).Info("server header enrichment threads finished")
+
+	state = 3
 	log.WithFields(logrus.Fields{"state": "main"}).Infof("waiting for jarm fingerprint enrichment threads to finish")
 	jarmFingerprintWg.Wait()
 	close(enrichedResultChan)
 	log.WithFields(logrus.Fields{"state": "main"}).Info("jarm fingerprint enrichment threads finished")
 
 	// wait for export to finish
+	state = 4
 	log.WithFields(logrus.Fields{"state": "main"}).Info("waiting for export threads to finish")
 	resultWg.Wait()
 	log.WithFields(logrus.Fields{"state": "main"}).Info("done exporting to target")
 
+	state = 5
 	stopTime := time.Now()
 	Summarize(startTime, stopTime)
 }
