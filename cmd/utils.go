@@ -107,7 +107,7 @@ func ScanCloudServiceProvider(ctx context.Context, csp string, cloudServiceProvi
 func RunScan(cidrChan chan CidrRange) {
 	ports := strings.Split(portsString, ",")
 	log.WithFields(logrus.Fields{"state": "main"}).Infof("ports to be scanned: %s", ports)
-	resultChan := make(chan *CertResult, threadCount*2)
+	resultChan := make(chan *CertResult, threadCount*5)
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	defer cancelFunc()
