@@ -37,7 +37,6 @@ import (
 
 var (
 	debugFlag          bool
-	traceFlag          bool
 	keywordRegexString string
 	regionRegexString  string
 	portsString        string
@@ -65,16 +64,20 @@ var (
 )
 
 var (
-	log               = logrus.New()
-	statsLock         = sync.RWMutex{}
-	cidrRangesToScan  = 0
-	cidrRangesScanned = 0
-	totalIpsScanned   = 0
-	targetScanRate    = atomic.Int64{}
-	totalFindings     = 0
-	jarmRetryCount    = 3
-	tcpTimeout        = 10
-	consoleRefreshMs  = 5000
+	log                     = logrus.New()
+	cidrRangesToScan        = atomic.Int64{}
+	cidrRangesScanned       = atomic.Int64{}
+	ipsScanned              = atomic.Int64{}
+	ipScanRate              = atomic.Int64{}
+	totalFindings           = atomic.Int64{}
+	jarmFingerprintsGrabbed = atomic.Int64{}
+	jarmFingerprintsScanned = atomic.Int64{}
+	serverHeadersGrabbed    = atomic.Int64{}
+	serverHeadersScanned    = atomic.Int64{}
+	resultsProcessed        = atomic.Int64{}
+	jarmRetryCount          = 3
+	tcpTimeout              = 10
+	consoleRefreshSeconds   = 5000
 
 	httpClientPool = sync.Pool{
 		New: func() interface{} {
@@ -141,7 +144,7 @@ func init() {
 
 	rootCmd.PersistentFlags().StringVarP(&portsString, "ports", "p", "443", "ports to search")
 	rootCmd.PersistentFlags().IntVarP(&threadCount, "threads", "t", 1000, "number of parallel threads to use")
-	rootCmd.PersistentFlags().IntVar(&consoleRefreshMs, "refresh", 1000, "console progress refresh ms")
+	rootCmd.PersistentFlags().IntVar(&consoleRefreshSeconds, "refresh", 5, "console progress refresh in seconds")
 
 	// Export to disk
 	rootCmd.PersistentFlags().StringVarP(&outFileName, "output", "o", "", "output file on disk")
@@ -174,6 +177,5 @@ func init() {
 
 	// debugging
 	rootCmd.PersistentFlags().BoolVarP(&debugFlag, "debug", "v", false, "enable debug logs")
-	rootCmd.PersistentFlags().BoolVar(&traceFlag, "trace", false, "enable trace logs")
 
 }
