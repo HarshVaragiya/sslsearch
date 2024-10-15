@@ -30,16 +30,6 @@ var awsCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(awsCmd)
 	awsCmd.Flags().StringVarP(&regionRegexString, "region-regex", "r", ".*", "regex of cloud service provider region to search")
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// awsCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// awsCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
 
 type AWS struct {
