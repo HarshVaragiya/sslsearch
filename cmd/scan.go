@@ -119,7 +119,7 @@ func PrintProgressToConsole(refreshInterval int) {
 }
 
 func ServerHeaderEnrichment(ctx context.Context, rawResultChan chan *CertResult, enrichmentThreads int, wg *sync.WaitGroup) chan *CertResult {
-	enrichedResultChan := make(chan *CertResult, 1000)
+	enrichedResultChan := make(chan *CertResult, 50000)
 	wg.Add(enrichmentThreads)
 	for i := 0; i < enrichmentThreads; i++ {
 		go headerEnrichmentThread(ctx, rawResultChan, enrichedResultChan, wg)
@@ -128,7 +128,7 @@ func ServerHeaderEnrichment(ctx context.Context, rawResultChan chan *CertResult,
 }
 
 func JARMFingerprintEnrichment(ctx context.Context, rawResultChan chan *CertResult, enrichmentThreads int, wg *sync.WaitGroup) chan *CertResult {
-	enrichedResultChan := make(chan *CertResult, 1000)
+	enrichedResultChan := make(chan *CertResult, 50000)
 	wg.Add(enrichmentThreads)
 	for i := 0; i < enrichmentThreads; i++ {
 		go jarmFingerprintEnrichmentThread(ctx, rawResultChan, enrichedResultChan, wg)
