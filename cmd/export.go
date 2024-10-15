@@ -16,36 +16,15 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func SaveResultsToDisk(resultChan chan *CertResult, resultWg *sync.WaitGroup, outFileName string, consoleout bool) {
-	outFile, err := os.OpenFile(outFileName, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
-	if err != nil {
-		log.WithFields(logrus.Fields{"state": "save", "errmsg": err}).Fatalf("error opening output file")
-	}
-	defer resultWg.Done()
-	enc := json.NewEncoder(outFile)
-	for result := range resultChan {
-		if err := enc.Encode(result); err != nil {
-			log.WithFields(logrus.Fields{"state": "save", "subject": result.Subject, "SANs": fmt.Sprintf("%s", result.SANs), "errmsg": err}).Error("error saving result to disk")
-		}
-		if consoleout {
-			logToConsole(result)
-		} else {
-			log.WithFields(
-				logrus.Fields{
-					"state":   "save",
-					"cloud":   result.CSP,
-					"region":  result.Region,
-					"subject": result.Subject,
-					"SANs":    fmt.Sprintf("%s", result.SANs),
-					"jarm":    result.JARM,
-					"port":    result.Port,
-					"server":  result.ServerHeader}).Debug(result.Ip)
-		}
-	}
+type Elasticsearch struct {
+	elasticHost  string
+	elasticUser  string
+	elasticPass  string
+	elasticIndex string
+	client       *elasticsearch.TypedClient
 }
 
-func ExportResultsToElasticsearch(resultChan chan *CertResult, resultWg *sync.WaitGroup, consoleout bool) {
-	defer resultWg.Done()
+func NewElasticsearch(elasticHost, elasticUser, elasticPass, elasticIndex string) (*Elasticsearch, error) {
 	client, err := elasticsearch.NewTypedClient(elasticsearch.Config{
 		Addresses:     []string{elasticsearchHost},
 		Username:      elasticsearchUsername,
@@ -58,43 +37,103 @@ func ExportResultsToElasticsearch(resultChan chan *CertResult, resultWg *sync.Wa
 		},
 	})
 	if err != nil {
-		log.Fatalf("error connecting to elasticsearch. error = %v", err)
+		log.WithFields(logrus.Fields{"state": "elastic", "errmsg": err}).Errorf("error creating elasticsearch client")
+		return nil, err
 	}
-	if _, err := client.Indices.Create(elasticsearchIndex).Do(context.TODO()); err != nil {
-		log.Fatalf("error creating elasticsearch index. error = %v", err)
-	}
-	log.Infof("exporting to elasticsearch on %s index: %s", elasticsearchHost, elasticsearchIndex)
-	for result := range resultChan {
-		if _, err = client.Index(elasticsearchIndex).Request(result).Do(context.TODO()); err != nil {
-			log.Errorf("error exporting result to elasticsearch. error = %v", err)
-		}
-	}
-
+	return &Elasticsearch{
+		elasticHost:  elasticsearchHost,
+		elasticUser:  elasticsearchUsername,
+		elasticPass:  elasticsearchPassword,
+		elasticIndex: elasticsearchIndex,
+		client:       client,
+	}, nil
 }
 
-func ExportResultsToCassandra(resultChan chan *CertResult, resultWg *sync.WaitGroup, consoleout bool) {
+func (es *Elasticsearch) Export(ctx context.Context, resultChan chan *CertResult, resultWg *sync.WaitGroup) error {
 	defer resultWg.Done()
-	cluster := gocql.NewCluster(cassandraConnectionString)
-	cluster.Timeout = time.Second * 30
-	s := strings.Split(cassandraKeyspace_Table, ".")
-	cluster.Keyspace = s[0]
-	table := s[1]
-	session, err := cluster.CreateSession()
-	log.Infof("exporting to cassandra with RecordTsKey: %s", cassandraRecordTimeStampKey)
-	if err != nil {
-		log.Fatalf("error connecting to cassandra. error = %v", err)
+	if _, err := es.client.Indices.Create(elasticsearchIndex).Do(ctx); err != nil {
+		log.WithFields(logrus.Fields{"state": "elastic"}).Errorf("error creating elasticsearch index. error = %v", err)
 	}
+	log.WithFields(logrus.Fields{"state": "elastic"}).Infof("exporting to elasticsearch on %s index: %s", elasticsearchHost, elasticsearchIndex)
 	for result := range resultChan {
-		if err = insertRecord(session, table, cassandraRecordTimeStampKey, result); err != nil {
-			log.Fatalf("error writing to cassandra. error = %v", err)
+		if _, err := es.client.Index(elasticsearchIndex).Request(result).Do(ctx); err != nil {
+			log.WithFields(logrus.Fields{"state": "elastic"}).Errorf("error exporting result to elasticsearch. error = %v", err)
 		}
-		if consoleout {
-			logToConsole(result)
+		resultsProcessed.Add(1)
+	}
+	return nil
+}
+
+type DiskTarget struct {
+	filename string
+	outfile  *os.File
+}
+
+func NewDiskTarget(filename string) (*DiskTarget, error) {
+	outfile, err := os.OpenFile(filename, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+	if err != nil {
+		log.WithFields(logrus.Fields{"state": "disk", "errmsg": err}).Errorf("error opening output file")
+		return nil, err
+	}
+	return &DiskTarget{filename: filename, outfile: outfile}, nil
+}
+
+func (tg *DiskTarget) Export(ctx context.Context, resultChan chan *CertResult, resultWg *sync.WaitGroup) error {
+	defer resultWg.Done()
+	defer tg.outfile.Close()
+	enc := json.NewEncoder(tg.outfile)
+	log.WithFields(logrus.Fields{"state": "disk"}).Infof("exporting to file: %s", tg.filename)
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case result, ok := <-resultChan:
+			if !ok {
+				return nil
+			}
+			if err := enc.Encode(result); err != nil {
+				log.WithFields(logrus.Fields{"state": "disk", "errmsg": err}).Errorf("error exporting result")
+			}
+			resultsProcessed.Add(1)
 		}
 	}
 }
 
-func insertRecord(session *gocql.Session, tableName string, record_ts string, result *CertResult) error {
+type Cassandra struct {
+	session            *gocql.Session
+	tableName          string
+	recordTimestampKey string
+}
+
+func NewCassandra(connectionString, keyspaceTableName, recordTimestampKey string) (*Cassandra, error) {
+	cluster := gocql.NewCluster(connectionString)
+	cluster.Timeout = time.Second * 30
+	s := strings.Split(keyspaceTableName, ".")
+	cluster.Keyspace = s[0]
+	tableName := s[1]
+	session, err := cluster.CreateSession()
+	return &Cassandra{session, tableName, recordTimestampKey}, err
+}
+func (ca *Cassandra) Export(ctx context.Context, resultChan chan *CertResult, resultWg *sync.WaitGroup) error {
+	defer resultWg.Done()
+	log.WithFields(logrus.Fields{"state": "cassandra"}).Infof("exporting to cassandra with RecordTsKey: %s", cassandraRecordTimeStampKey)
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case result, ok := <-resultChan:
+			if !ok {
+				return nil
+			}
+			if err := insertRecordIntoCassandra(ca.session, ca.tableName, cassandraRecordTimeStampKey, result); err != nil {
+				log.WithFields(logrus.Fields{"state": "cassandra", "errmsg": err}).Errorf("error inserting record into cassandra")
+			}
+			resultsProcessed.Add(1)
+		}
+	}
+}
+
+func insertRecordIntoCassandra(session *gocql.Session, tableName string, record_ts string, result *CertResult) error {
 	query := session.Query(
 		fmt.Sprintf("INSERT INTO %s (record_ts, csp, region, ip, port, subject, scan_ts, issuer, sans, server_header, jarm, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", tableName),
 		record_ts, result.CSP, result.Region, result.Ip, result.Port, result.Subject, result.Timestamp, result.Issuer, result.SANs, result.ServerHeader, result.JARM, result.Meta,
@@ -103,17 +142,4 @@ func insertRecord(session *gocql.Session, tableName string, record_ts string, re
 		return fmt.Errorf("failed to execute query: %v", err)
 	}
 	return nil
-}
-
-func logToConsole(result *CertResult) {
-	log.WithFields(
-		logrus.Fields{
-			"state":   "save",
-			"cloud":   result.CSP,
-			"region":  result.Region,
-			"subject": result.Subject,
-			"SANs":    fmt.Sprintf("%s", result.SANs),
-			"jarm":    result.JARM,
-			"port":    result.Port,
-			"server":  result.ServerHeader}).Info(result.Ip)
 }

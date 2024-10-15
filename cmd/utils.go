@@ -27,10 +27,9 @@ func PerformPreRunChecks(checkRegion bool) {
 	if checkRegion {
 		CheckRegionRegex()
 	}
-	log.WithFields(logrus.Fields{"state": "main"}).Info("sanity check passed")
+	log.WithFields(logrus.Fields{"state": "main"}).Info("sanity checks passed")
 }
 
-// perform sanity check on inputs
 func CheckInputParameters() {
 	if _, err := regexp.Compile("(?i)" + keywordRegexString); err != nil {
 		log.WithFields(logrus.Fields{"state": "main"}).Fatal("could not compile keyword regex")
@@ -43,19 +42,16 @@ func CheckRegionRegex() {
 	}
 }
 
-func GetRecordTimestampKey() string {
+func getRecordKey() string {
 	currentTime := time.Now()
 	formattedTime := currentTime.Format("2006-01-02")
 	return formattedTime
 }
 
 func UpdateLogLevel() {
-	if traceFlag {
-		log.SetLevel(logrus.TraceLevel)
-		log.WithFields(logrus.Fields{"state": "main"}).Info("enabled trace logging")
-	} else if debugFlag {
+	if debugFlag {
 		log.SetLevel(logrus.DebugLevel)
-		log.WithFields(logrus.Fields{"state": "main"}).Info("enabled debug logging")
+		log.WithFields(logrus.Fields{"state": "main"}).Debugf("enabled debug logging")
 	}
 }
 
@@ -70,12 +66,12 @@ func PerformOutputChecks() {
 			log.WithFields(logrus.Fields{"state": "checks"}).Debugf("output file does not exist and will be created")
 		}
 	}
-	if cassandraRecordTimeStampKey == "" {
-		cassandraRecordTimeStampKey = GetRecordTimestampKey()
-		log.WithFields(logrus.Fields{"state": "checks"}).Infof("cassandra output timestamp key: %s", cassandraRecordTimeStampKey)
+	if cassandraConnectionString != "" && cassandraRecordTimeStampKey == "" {
+		cassandraRecordTimeStampKey = getRecordKey()
+		log.WithFields(logrus.Fields{"state": "checks"}).Infof("cassandra output record key: %s", cassandraRecordTimeStampKey)
 	}
-	if elasticsearchIndex == "" {
-		elasticsearchIndex = fmt.Sprintf("sslsearch-%s", GetRecordTimestampKey())
+	if elasticsearchHost != "" && elasticsearchIndex == "" {
+		elasticsearchIndex = fmt.Sprintf("sslsearch-%s", getRecordKey())
 		log.WithFields(logrus.Fields{"state": "checks"}).Infof("elasticsearch output index: %s", elasticsearchIndex)
 	}
 }
@@ -129,14 +125,6 @@ func RunScan(cidrChan chan CidrRange) {
 		log.WithFields(logrus.Fields{"state": "main"}).Fatalf("forcing exit due to %v", s.String())
 	}()
 
-	// log results to disk
-	// log.WithFields(logrus.Fields{"state": "main"}).Infof("saving output to: %v", outFileName)
-	// outFile, err := os.OpenFile(outFileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-	// if err != nil {
-	// 	log.WithFields(logrus.Fields{"state": "main", "errmsg": err.Error()}).Fatalf("could not open output file for writing")
-	// }
-	// defer outFile.Close()
-
 	// start scanning
 	startTime := time.Now()
 	log.WithFields(logrus.Fields{"state": "main"}).Info("starting scanner threads")
@@ -174,11 +162,13 @@ func RunScan(cidrChan chan CidrRange) {
 	resultWg := &sync.WaitGroup{}
 	resultWg.Add(1)
 
-	go ExportResultsToElasticsearch(enrichedResultChan, resultWg, consoleOut)
-	// go ExportResultsToCassandra(enrichedResultChan, resultWg, consoleOut)
-	//go SaveResultsToDisk(resultChan, resultWg, outFileName, consoleOut)
+	tg, err := NewDiskTarget(outFileName)
+	if err != nil {
+		log.WithFields(logrus.Fields{"state": "main"}).Fatal("error creating disk target")
+	}
+	go tg.Export(ctx, resultChan, resultWg)
 
-	go PrintProgressToConsole(consoleRefreshMs)
+	go PrintProgressToConsole(consoleRefreshSeconds)
 
 	// wait for everything to finish!
 	log.WithFields(logrus.Fields{"state": "main"}).Info("waiting for threads to finish scanning")
@@ -237,9 +227,7 @@ func SplitCIDR(cidrString CidrRange, suffixLenPerGoRoutine int, cidrChan chan Ci
 	}
 	for i := cidr.AdjustPrefixLen(adjustPrefixLength).PrefixBlockIterator(); i.HasNext(); {
 		nextCidr := i.Next().String()
-		statsLock.Lock()
-		cidrRangesToScan += 1
-		statsLock.Unlock()
+		cidrRangesToScan.Add(1)
 		cidrChan <- CidrRange{Cidr: nextCidr, CSP: cidrString.CSP, Region: cidrString.Region}
 	}
 	return nil
@@ -251,11 +239,13 @@ func ServerHeaderEnrichmentThread(ctx context.Context, rawResultChan, enrichedRe
 	for rawResult := range rawResultChan {
 		if header, err := GrabServerHeaderForRemote(getRemoteAddrString(rawResult.Ip, rawResult.Port)); err == nil {
 			rawResult.ServerHeader = header
+			serverHeadersGrabbed.Add(1)
 			log.WithFields(logrus.Fields{"state": "enrichment", "remote": getRemoteAddrString(rawResult.Ip, rawResult.Port)}).Debugf("Server: %v", header)
 		} else {
 			rawResult.ServerHeader = header
 			log.WithFields(logrus.Fields{"state": "enrichment", "remote": getRemoteAddrString(rawResult.Ip, rawResult.Port), "errmsg": err.Error()}).Tracef("Server: %v ", header)
 		}
+		serverHeadersScanned.Add(1)
 		enrichedResultChan <- rawResult
 	}
 	log.WithFields(logrus.Fields{"state": "enrichment"}).Debug("server header enrichment thread exiting")
@@ -267,11 +257,13 @@ func JarmFingerprintEnrichmentThread(ctx context.Context, rawResultChan, enriche
 	for rawResult := range rawResultChan {
 		if jarmFingerprint, err := GetJARMFingerprint(getRemoteAddrString(rawResult.Ip, rawResult.Port)); err == nil {
 			rawResult.JARM = jarmFingerprint
+			jarmFingerprintsGrabbed.Add(1)
 			log.WithFields(logrus.Fields{"state": "enrichment", "remote": getRemoteAddrString(rawResult.Ip, rawResult.Port)}).Debugf("JARM Fingerprint: %v", jarmFingerprint)
 		} else {
 			rawResult.JARM = jarmFingerprint
 			log.WithFields(logrus.Fields{"state": "enrichment", "remote": getRemoteAddrString(rawResult.Ip, rawResult.Port), "errmsg": err.Error()}).Tracef("JARM Fingerprint: %v ", jarmFingerprint)
 		}
+		jarmFingerprintsScanned.Add(1)
 		enrichedResultChan <- rawResult
 	}
 	log.WithFields(logrus.Fields{"state": "enrichment"}).Debug("JARM Fingerprint enrichment thread exiting")

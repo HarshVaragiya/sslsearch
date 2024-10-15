@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"sync"
 	"time"
 )
 
@@ -17,6 +18,10 @@ const (
 
 type CidrRangeInput interface {
 	GetCidrRanges(context.Context, chan CidrRange, string)
+}
+
+type ExportTarget interface {
+	Export(ctx context.Context, resultChan chan *CertResult, resultWg *sync.WaitGroup) error
 }
 
 type CidrRange struct {

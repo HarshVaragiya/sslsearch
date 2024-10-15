@@ -46,9 +46,7 @@ func ScanCertificatesInCidr(ctx context.Context, cidrChan chan CidrRange, ports 
 					}
 				}
 			}
-			statsLock.Lock()
-			cidrRangesScanned += 1
-			statsLock.Unlock()
+			cidrRangesScanned.Add(1)
 		}
 	}
 }
@@ -65,10 +63,8 @@ func ScanRemote(ctx context.Context, ip net.IP, port string, keywordRegex *regex
 		tlsConfig := tlsConfigPool.Get().(*tls.Config)
 		defer tlsConfigPool.Put(tlsConfig)
 		conn, err := tls.DialWithDialer(dialer, "tcp", remote, tlsConfig)
-		statsLock.Lock()
-		defer statsLock.Unlock()
-		totalIpsScanned += 1
-		targetScanRate.Add(1)
+		ipsScanned.Add(1)
+		ipScanRate.Add(1)
 		if err != nil {
 			return nil, errConn
 		}
@@ -81,7 +77,7 @@ func ScanRemote(ctx context.Context, ip net.IP, port string, keywordRegex *regex
 		sanMatch := keywordRegex.MatchString(fmt.Sprintf("%s", certs[0].DNSNames))
 		log.WithFields(logrus.Fields{"state": "deepscan", "remote": remote, "subject": certs[0].Subject.String(), "match": subjectMatch || sanMatch}).Debugf("SANs: %s ", certs[0].DNSNames)
 		if subjectMatch || sanMatch {
-			totalFindings += 1
+			totalFindings.Add(1)
 			return &CertResult{
 				Ip:      ip.String(),
 				Port:    port,
@@ -95,26 +91,26 @@ func ScanRemote(ctx context.Context, ip net.IP, port string, keywordRegex *regex
 }
 
 func Summarize(start, stop time.Time) {
-	statsLock.Lock()
-	defer statsLock.Unlock()
 	elapsedTime := stop.Sub(start)
-	percentage := float64(totalIpsScanned) / TOTAL_IPv4_ADDR_COUNT
-	fmt.Printf("Total IPs Scanned           : %v (%v %% of the internet)\n", totalIpsScanned, percentage)
-	fmt.Printf("Total Findings              : %v \n", totalFindings)
-	fmt.Printf("Total CIDR ranges Scanned   : %v \n", cidrRangesScanned)
+	percentage := float64(ipsScanned.Load()) / TOTAL_IPv4_ADDR_COUNT
+	fmt.Printf("Total IPs Scanned           : %v (%v %% of the internet)\n", ipsScanned.Load(), percentage)
+	fmt.Printf("Total Findings              : %v \n", totalFindings.Load())
+	fmt.Printf("Total CIDR ranges Scanned   : %v \n", cidrRangesScanned.Load())
 	fmt.Printf("Time Elapsed                : %v \n", elapsedTime)
-	fmt.Printf("Scan Speed                  : %v IPs/second \n", (1000000000*totalIpsScanned)/int(elapsedTime))
+	fmt.Printf("Scan Speed                  : %v IPs/second \n", float64(1000000000*ipsScanned.Load())/float64(elapsedTime))
 }
 
 func PrintProgressToConsole(refreshInterval int) {
 	for {
-		statsLock.RLock()
-		targetsScannedSinceRefresh := targetScanRate.Load()
-		scanRate := float64(1000*targetsScannedSinceRefresh) / float64(refreshInterval)
-		targetScanRate.Store(0)
-		fmt.Printf("Progress: CIDRs [ %v / %v ]  Findings: %v TotalIPs Scanned: %v | Rate: %.2f  ips/sec         \r", cidrRangesScanned, cidrRangesToScan, totalFindings, totalIpsScanned, scanRate)
-		statsLock.RUnlock()
-		time.Sleep(time.Millisecond * time.Duration(int64(refreshInterval)))
+		targetsScannedSinceRefresh := ipScanRate.Load()
+		ipScanRate.Store(0)
+		scanRate := float64(targetsScannedSinceRefresh) / float64(refreshInterval)
+		fmt.Printf("Progress: CIDRs [ %v / %v ]  IPs Scanned: %v | Findings: %v | Server Headers: %v | JARM: %v |  Export: %v  | Rate: %.2f  ips/sec         \r",
+			cidrRangesScanned.Load(), cidrRangesToScan.Load(),
+			ipsScanned.Load(), totalFindings.Load(),
+			serverHeadersScanned.Load(),
+			jarmFingerprintsScanned.Load(), resultsProcessed.Load(), scanRate)
+		time.Sleep(time.Second * time.Duration(int64(refreshInterval)))
 	}
 }
 
