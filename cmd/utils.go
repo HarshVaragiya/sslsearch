@@ -107,7 +107,7 @@ func ScanCloudServiceProvider(ctx context.Context, csp string, cloudServiceProvi
 func RunScan(cidrChan chan CidrRange) {
 	ports := strings.Split(portsString, ",")
 	log.WithFields(logrus.Fields{"state": "main"}).Infof("ports to be scanned: %s", ports)
-	resultChan := make(chan *CertResult, threadCount*5)
+	resultChan := make(chan *CertResult, threadCount*8)
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	defer cancelFunc()
@@ -208,8 +208,8 @@ func SplitCIDR(cidrString CidrRange, suffixLenPerGoRoutine int, cidrChan chan Ci
 	}
 	for i := cidr.AdjustPrefixLen(adjustPrefixLength).PrefixBlockIterator(); i.HasNext(); {
 		nextCidr := i.Next().String()
-		cidrRangesToScan.Add(1)
 		cidrChan <- CidrRange{Cidr: nextCidr, CSP: cidrString.CSP, Region: cidrString.Region}
+		cidrRangesToScan.Add(1)
 	}
 	return nil
 }
@@ -221,6 +221,9 @@ func headerEnrichmentThread(ctx context.Context, rawResultChan, enrichedResultCh
 		serverHeader, allHeaders, err := GrabServerHeaderForRemote(getRemoteAddrString(rawResult.Ip, rawResult.Port))
 		if err == nil {
 			serverHeadersGrabbed.Add(1)
+		}
+		if val, ok := allHeaders["Host"]; ok {
+			rawResult.Host = val
 		}
 		rawResult.Server = serverHeader
 		rawResult.Headers = allHeaders
