@@ -72,6 +72,7 @@ var (
 	jarmFingerprintsScanned = atomic.Int64{}
 	serverHeadersGrabbed    = atomic.Int64{}
 	serverHeadersScanned    = atomic.Int64{}
+	resultsExported         = atomic.Int64{}
 	resultsProcessed        = atomic.Int64{}
 	jarmRetryCount          = 3
 	tcpTimeout              = 10

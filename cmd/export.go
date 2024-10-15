@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"github.com/elastic/go-elasticsearch/v8/typedapi/types"
 	"net/http"
 	"os"
 	"strings"
@@ -15,6 +16,10 @@ import (
 	"github.com/gocql/gocql"
 	"github.com/sirupsen/logrus"
 )
+
+func intPtr(i int) *int {
+	return &i
+}
 
 func GetExportTarget() ExportTarget {
 	if diskExport {
@@ -76,13 +81,26 @@ func NewElasticsearch(elasticHost, elasticUser, elasticPass, elasticIndex string
 
 func (es *Elasticsearch) Export(resultChan chan *CertResult, resultWg *sync.WaitGroup) error {
 	defer resultWg.Done()
-	if _, err := es.client.Indices.Create(elasticsearchIndex).Do(context.TODO()); err != nil {
+	// Define the index settings
+	indexSettings := &types.IndexSettings{
+		Mapping: &types.MappingLimitSettings{
+			TotalFields: &types.MappingLimitSettingsTotalFields{
+				Limit: intPtr(50000),
+			},
+		},
+		NumberOfShards: "10",
+	}
+	req := es.client.Indices.Create(es.elasticIndex)
+	req.Settings(indexSettings)
+	if _, err := req.Do(context.TODO()); err != nil {
 		log.WithFields(logrus.Fields{"state": "elastic"}).Errorf("error creating elasticsearch index. error = %v", err)
 	}
 	log.WithFields(logrus.Fields{"state": "elastic"}).Infof("exporting to elasticsearch index: %s", elasticsearchIndex)
 	for result := range resultChan {
 		if _, err := es.client.Index(elasticsearchIndex).Request(result).Do(context.TODO()); err != nil {
 			log.WithFields(logrus.Fields{"state": "elastic"}).Errorf("error exporting result to elasticsearch. error = %v", err)
+		} else {
+			resultsExported.Add(1)
 		}
 		resultsProcessed.Add(1)
 	}
@@ -111,6 +129,8 @@ func (tg *DiskTarget) Export(resultChan chan *CertResult, resultWg *sync.WaitGro
 	for result := range resultChan {
 		if err := enc.Encode(result); err != nil {
 			log.WithFields(logrus.Fields{"state": "disk", "errmsg": err}).Errorf("error exporting result")
+		} else {
+			resultsExported.Add(1)
 		}
 		resultsProcessed.Add(1)
 	}
@@ -138,6 +158,8 @@ func (ca *Cassandra) Export(resultChan chan *CertResult, resultWg *sync.WaitGrou
 	for result := range resultChan {
 		if err := insertRecordIntoCassandra(ca.session, ca.tableName, cassandraRecordTimeStampKey, result); err != nil {
 			log.WithFields(logrus.Fields{"state": "cassandra", "errmsg": err}).Errorf("error inserting record into cassandra")
+		} else {
+			resultsExported.Add(1)
 		}
 		resultsProcessed.Add(1)
 	}

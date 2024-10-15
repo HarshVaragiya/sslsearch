@@ -97,8 +97,9 @@ func Summarize(start, stop time.Time) {
 	fmt.Printf("Total Findings              : %v \n", totalFindings.Load())
 	fmt.Printf("Total CIDR ranges Scanned   : %v \n", cidrRangesScanned.Load())
 	fmt.Printf("Time Elapsed                : %v \n", elapsedTime)
-	fmt.Printf("Server Headares             : %v / %v \n", serverHeadersGrabbed.Load(), serverHeadersScanned.Load())
+	fmt.Printf("Server Headers              : %v / %v \n", serverHeadersGrabbed.Load(), serverHeadersScanned.Load())
 	fmt.Printf("Jarm Fingerprints           : %v / %v \n", jarmFingerprintsGrabbed.Load(), jarmFingerprintsScanned.Load())
+	fmt.Printf("Results Export              : %v / %v \n", resultsExported.Load(), resultsProcessed.Load())
 	fmt.Printf("Time Elapsed                : %v \n", elapsedTime)
 	fmt.Printf("Scan Speed                  : %v IPs/second \n", float64(1000000000*ipsScanned.Load())/float64(elapsedTime))
 }
@@ -108,12 +109,12 @@ func PrintProgressToConsole(refreshInterval int) {
 		targetsScannedSinceRefresh := ipScanRate.Load()
 		ipScanRate.Store(0)
 		scanRate := float64(targetsScannedSinceRefresh) / float64(refreshInterval)
-		fmt.Printf("Progress: CIDRs [ %v / %v ]  IPs Scanned: %v | Findings: %v | Headers Grabbed: %v / %v | JARM: %v / %v |  Export: %v  | Rate: %.2f  ips/sec         \r",
+		fmt.Printf("Progress: CIDRs [ %v / %v ]  IPs Scanned: %v | Findings: %v | Headers Grabbed: %v / %v | JARM: %v / %v |  Export: %v / %v  | Rate: %.2f  ips/sec         \r",
 			cidrRangesScanned.Load(), cidrRangesToScan.Load(),
 			ipsScanned.Load(), totalFindings.Load(),
 			serverHeadersGrabbed.Load(), serverHeadersScanned.Load(),
 			jarmFingerprintsGrabbed.Load(), jarmFingerprintsScanned.Load(),
-			resultsProcessed.Load(), scanRate)
+			resultsExported.Load(), resultsProcessed.Load(), scanRate)
 		time.Sleep(time.Second * time.Duration(int64(refreshInterval)))
 	}
 }
