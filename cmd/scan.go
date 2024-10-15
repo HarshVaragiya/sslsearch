@@ -97,6 +97,9 @@ func Summarize(start, stop time.Time) {
 	fmt.Printf("Total Findings              : %v \n", totalFindings.Load())
 	fmt.Printf("Total CIDR ranges Scanned   : %v \n", cidrRangesScanned.Load())
 	fmt.Printf("Time Elapsed                : %v \n", elapsedTime)
+	fmt.Printf("Server Headares             : %v / %v \n", serverHeadersGrabbed.Load(), serverHeadersScanned.Load())
+	fmt.Printf("Jarm Fingerprints           : %v / %v \n", jarmFingerprintsGrabbed.Load(), jarmFingerprintsScanned.Load())
+	fmt.Printf("Time Elapsed                : %v \n", elapsedTime)
 	fmt.Printf("Scan Speed                  : %v IPs/second \n", float64(1000000000*ipsScanned.Load())/float64(elapsedTime))
 }
 
@@ -105,11 +108,12 @@ func PrintProgressToConsole(refreshInterval int) {
 		targetsScannedSinceRefresh := ipScanRate.Load()
 		ipScanRate.Store(0)
 		scanRate := float64(targetsScannedSinceRefresh) / float64(refreshInterval)
-		fmt.Printf("Progress: CIDRs [ %v / %v ]  IPs Scanned: %v | Findings: %v | Server Headers: %v | JARM: %v |  Export: %v  | Rate: %.2f  ips/sec         \r",
+		fmt.Printf("Progress: CIDRs [ %v / %v ]  IPs Scanned: %v | Findings: %v | Headers Grabbed: %v / %v | JARM: %v / %v |  Export: %v  | Rate: %.2f  ips/sec         \r",
 			cidrRangesScanned.Load(), cidrRangesToScan.Load(),
 			ipsScanned.Load(), totalFindings.Load(),
-			serverHeadersScanned.Load(),
-			jarmFingerprintsScanned.Load(), resultsProcessed.Load(), scanRate)
+			serverHeadersGrabbed.Load(), serverHeadersScanned.Load(),
+			jarmFingerprintsGrabbed.Load(), jarmFingerprintsScanned.Load(),
+			resultsProcessed.Load(), scanRate)
 		time.Sleep(time.Second * time.Duration(int64(refreshInterval)))
 	}
 }
@@ -118,7 +122,7 @@ func ServerHeaderEnrichment(ctx context.Context, rawResultChan chan *CertResult,
 	enrichedResultChan := make(chan *CertResult, 1000)
 	wg.Add(enrichmentThreads)
 	for i := 0; i < enrichmentThreads; i++ {
-		go ServerHeaderEnrichmentThread(ctx, rawResultChan, enrichedResultChan, wg)
+		go headerEnrichmentThread(ctx, rawResultChan, enrichedResultChan, wg)
 	}
 	return enrichedResultChan
 }
@@ -127,7 +131,7 @@ func JARMFingerprintEnrichment(ctx context.Context, rawResultChan chan *CertResu
 	enrichedResultChan := make(chan *CertResult, 1000)
 	wg.Add(enrichmentThreads)
 	for i := 0; i < enrichmentThreads; i++ {
-		go JarmFingerprintEnrichmentThread(ctx, rawResultChan, enrichedResultChan, wg)
+		go jarmFingerprintEnrichmentThread(ctx, rawResultChan, enrichedResultChan, wg)
 	}
 	return enrichedResultChan
 }

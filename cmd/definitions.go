@@ -21,7 +21,7 @@ type CidrRangeInput interface {
 }
 
 type ExportTarget interface {
-	Export(ctx context.Context, resultChan chan *CertResult, resultWg *sync.WaitGroup) error
+	Export(resultChan chan *CertResult, resultWg *sync.WaitGroup) error
 }
 
 type CidrRange struct {
@@ -32,15 +32,17 @@ type CidrRange struct {
 }
 
 type CertResult struct {
-	Ip           string    `json:"ip"`
-	Port         string    `json:"port"`
-	Subject      string    `json:"subject"`
-	Issuer       string    `json:"issuer"`
-	SANs         []string  `json:"SANs"`
-	ServerHeader string    `json:"server"`
-	JARM         string    `json:"jarm"`
-	CSP          string    `json:"cloud"`
-	Region       string    `json:"region"`
-	Meta         string    `json:"metadata"`
-	Timestamp    time.Time `json:"timestamp"`
+	Ip        string            `json:"ip"`
+	Port      string            `json:"port"`
+	Subject   string            `json:"subject"`
+	Issuer    string            `json:"issuer"`
+	SANs      []string          `json:"SANs"`
+	JARM      string            `json:"jarm"`
+	CSP       string            `json:"cloud"`
+	Region    string            `json:"region"`
+	Meta      string            `json:"metadata"`
+	Timestamp time.Time         `json:"timestamp"`
+	Headers   map[string]string `json:"headers"`
+	Server    string            `json:"server"`
+	Host      string            `json:"host"`
 }

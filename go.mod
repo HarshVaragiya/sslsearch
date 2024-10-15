@@ -1,8 +1,6 @@
 module github.com/HarshVaragiya/sslsearch
 
-go 1.21
-
-toolchain go1.21.6
+go 1.23
 
 replace github.com/gocql/gocql => github.com/scylladb/gocql v1.13.0
 
