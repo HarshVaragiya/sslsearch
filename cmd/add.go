@@ -39,7 +39,7 @@ var addCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 
 		rdb := redis.NewClient(&redis.Options{
-			Addr:     "localhost:6379",
+			Addr:     redisHost,
 			Password: "", // no password set
 			DB:       0,  // use default DB
 		})
@@ -86,10 +86,11 @@ var addCmd = &cobra.Command{
 			if err != nil {
 				log.Fatalf("error marshalling CidrRange to JSON. error = %v", err)
 			}
-			rdb.LPush(ctx, applicationNamespace, data)
+			rdb.LPush(ctx, taskQueue, data)
 			taskCounter += 1
 		}
-		listLength := rdb.LLen(ctx, applicationNamespace).Val()
+		log.Printf("task queue : %s", taskQueue)
+		listLength := rdb.LLen(ctx, taskQueue).Val()
 		log.Printf("done adding all sub-cidr ranges to job queue.")
 		log.Printf("tasks added to queue : %d", taskCounter)
 		log.Printf("task queue size      : %d", listLength)

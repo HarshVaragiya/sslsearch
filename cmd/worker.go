@@ -26,9 +26,9 @@ import (
 )
 
 var (
-	redisHost            string
-	applicationNamespace string
-	workerTargets        string
+	redisHost     string
+	taskQueue     string
+	workerTargets string
 )
 
 // workerCmd represents the worker command
@@ -43,6 +43,6 @@ var workerCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(workerCmd)
 	workerCmd.PersistentFlags().StringVar(&redisHost, "redis.host", "", "redis host url")
-	workerCmd.PersistentFlags().StringVar(&applicationNamespace, "app.namespace", "sslsearch-tasks", "application namespace")
+	workerCmd.PersistentFlags().StringVar(&taskQueue, "app.namespace", "sslsearch-tasks", "application namespace")
 	workerCmd.MarkFlagRequired("redis.host")
 }

@@ -72,8 +72,8 @@ var processCmd = &cobra.Command{
 		for {
 			exportTarget := GetExportTarget()
 			initialResultChan := make(chan *CertResult, 1024)
-			log.WithFields(logrus.Fields{"state": "process", "type": "mgmt", "namespace": applicationNamespace}).Info("getting next task from queue")
-			data, err := rdb.LPop(ctx, applicationNamespace).Bytes()
+			log.WithFields(logrus.Fields{"state": "process", "type": "mgmt", "namespace": taskQueue}).Info("getting next task from queue")
+			data, err := rdb.LPop(ctx, taskQueue).Bytes()
 			if err != nil {
 				log.WithFields(logrus.Fields{"state": "process", "errmsg": err, "type": "mgmt"}).Error("error popping task from queue")
 				time.Sleep(time.Second * 30)
