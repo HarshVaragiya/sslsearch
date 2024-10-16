@@ -3,7 +3,7 @@ pipeline {
     stages {
         stage("build"){
             steps {
-                sh "docker build -t ${REPOSITORY}/sslsearch:${IMAGE_TAG} ."
+                sh "docker buildx build --platform linux/arm64,linux/amd64 --tag ${REPOSITORY}/sslsearch:${IMAGE_TAG} ."
             }
         }
         stage("push") {
