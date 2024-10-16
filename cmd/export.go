@@ -67,7 +67,7 @@ func NewElasticsearch(elasticHost, elasticUser, elasticPass, elasticIndex string
 		RetryBackoff:             func(i int) time.Duration { return time.Duration(i*10) * time.Second },
 		MaxRetries:               15,
 		CompressRequestBody:      true,
-		CompressRequestBodyLevel: gzip.DefaultCompression,
+		CompressRequestBodyLevel: gzip.BestCompression,
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: true,

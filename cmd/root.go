@@ -33,6 +33,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/valyala/fasthttp"
+	"github.com/spf13/viper"
 )
 
 var (
@@ -117,14 +118,10 @@ var rootCmd = &cobra.Command{
 	Use:   "sslsearch",
 	Short: "hunt for keywords in SSL certificates on cloud",
 	Long: `search cloud providers / IP ranges to scan for interesting keywords in
-SSL certificates. Do some initial recon for the findings if required. 
-Initial Recon: 
-	1. Server Header Grabbing
-	2. JARM Fingerprinting`,
+SSL certificates and do some initial recon for the findings like server header grabbing
+& JARM Fingerprinting`,
 }
 
-// Execute adds all child commands to the root command and sets flags appropriately.
-// This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
 	err := rootCmd.Execute()
 	if err != nil {
@@ -133,16 +130,8 @@ func Execute() {
 }
 
 func init() {
-	// Here you will define your flags and configuration settings.
-	// Cobra supports persistent flags, which, if defined here,
-	// will be global for your application.
-
-	// rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.sslsearch.yaml)")
-
-	// Cobra also supports local flags, which will only run
-	// when this action is called directly.
-
 	// refined input flags
+	viper.AutomaticEnv()
 	rootCmd.PersistentFlags().StringVarP(&keywordRegexString, "keyword-regex", "k", ".*", "case insensitive keyword regex to search in subject or SAN (ex: .*amazon.* or .* which matches all)")
 	rootCmd.PersistentFlags().StringVarP(&portsString, "ports", "p", "443", "ports to search")
 	rootCmd.PersistentFlags().IntVarP(&threadCount, "threads", "t", 1000, "number of parallel threads to use")
@@ -162,7 +151,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&cassandraConnectionString, "export.cassandra.connection-string", "", "cassandra connection string")
 	rootCmd.PersistentFlags().StringVar(&cassandraKeyspaceDotTable, "export.cassandra.table", "recon.sslsearch", "cassandra keyspace.table name to store data")
 	rootCmd.PersistentFlags().StringVar(&cassandraRecordTimeStampKey, "export.cassandra.result-ts-key", "", "cassandra default result timestamp key (defaults to YYYY-MM-DD)")
-	rootCmd.MarkFlagsRequiredTogether("export.cassandra", "export.cassandra.connection-string")
+	//rootCmd.MarkFlagsRequiredTogether("export.cassandra", "export.cassandra.connection-string")
 
 	// Export to elasticsearch
 	rootCmd.PersistentFlags().BoolVar(&elasticsearchExport, "export.elastic", false, "export findings to elasticsearch")
@@ -170,13 +159,12 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&elasticsearchUsername, "export.elastic.username", "", "elasticsearch username for authentication")
 	rootCmd.PersistentFlags().StringVar(&elasticsearchPassword, "export.elastic.password", "", "elasticsearch password for authentication")
 	rootCmd.PersistentFlags().StringVar(&elasticsearchIndex, "export.elastic.index", "", "elasticsearch index where data will be stored (default: sslsearch-YYYY-MM-DD)")
-	rootCmd.MarkFlagsRequiredTogether("export.elastic", "export.elastic.host", "export.elastic.username", "export.elastic.password")
+	//rootCmd.MarkFlagsRequiredTogether("export.elastic", "export.elastic.host", "export.elastic.username", "export.elastic.password")
 
-	rootCmd.MarkFlagsMutuallyExclusive("export.disk", "export.elastic", "export.cassandra")
+	//rootCmd.MarkFlagsMutuallyExclusive("export.disk", "export.elastic", "export.cassandra")
 
 	// Recon flags
 	rootCmd.PersistentFlags().IntVar(&serverHeaderThreadCount, "server-header-threads", 40, "number of threads to use for server header result enrichment")
 	rootCmd.PersistentFlags().IntVar(&jarmRetryCount, "jarm-retry-count", 3, "retry attempts for JARM fingerprint")
 	rootCmd.PersistentFlags().IntVar(&jarmFingerprintThreadCount, "jarm-threads", 40, "number of threads to use for JARM fingerprint enrichment (>200 might not be stable)")
-
 }
