@@ -147,7 +147,7 @@ func ProgressBar(refreshInterval int) {
 		jarmTracker.SetValue(jarmFingerprintsScanned.Load())
 		exportTracker.Total = jarmFingerprintsScanned.Load()
 		exportTracker.SetValue(resultsExported.Load())
-		if exportTracker.IsDone() && state != 4 {
+		if exportTracker.IsDone() && state < 4 {
 			// progress bar does not update number after it is marked "done" so keep it "undone" till we wait for export to finish
 			exportTracker.SetValue(exportTracker.Total - 1)
 		}
@@ -156,7 +156,7 @@ func ProgressBar(refreshInterval int) {
 }
 
 func ServerHeaderEnrichment(ctx context.Context, rawResultChan chan *CertResult, enrichmentThreads int, wg *sync.WaitGroup) chan *CertResult {
-	enrichedResultChan := make(chan *CertResult, 50000)
+	enrichedResultChan := make(chan *CertResult, enrichmentThreads*2000)
 	wg.Add(enrichmentThreads)
 	for i := 0; i < enrichmentThreads; i++ {
 		go headerEnrichmentThread(ctx, rawResultChan, enrichedResultChan, wg)
@@ -165,7 +165,7 @@ func ServerHeaderEnrichment(ctx context.Context, rawResultChan chan *CertResult,
 }
 
 func JARMFingerprintEnrichment(ctx context.Context, rawResultChan chan *CertResult, enrichmentThreads int, wg *sync.WaitGroup) chan *CertResult {
-	enrichedResultChan := make(chan *CertResult, 50000)
+	enrichedResultChan := make(chan *CertResult, enrichmentThreads*2000)
 	wg.Add(enrichmentThreads)
 	for i := 0; i < enrichmentThreads; i++ {
 		go jarmFingerprintEnrichmentThread(ctx, rawResultChan, enrichedResultChan, wg)
