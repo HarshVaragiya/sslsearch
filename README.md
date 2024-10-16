@@ -39,11 +39,15 @@ go install github.com/HarshVaragiya/sslsearch@latest
 
 
 ## Future plans (not a roadmap)
-1. Export integrations for cassandra cluster, redis, kafka and elasticsearch.
-2. QOL - Split codebase into different packages like libexport, libscan for better code quality.
-3. Certificate information like issuer, signature, chain etc to also be stored for analysis.
-4. CI/CD Setup with binary package available for download.
-5. Integration tests with test docker containers maybe. 
+- [x] Export integrations for cassandra cluster
+- [x] Export integration for elasticsearch
+- [x] Grab all HTTPS server response headers
+- [ ] Export integration to NATS
+- [ ] Worker implementation using gocraft/work for background scanning on k8s
+- [ ] QOL - Split codebase into different packages like libexport, libscan for better code quality.
+- [ ] Certificate information like issuer, signature, chain etc to also be stored for analysis.
+- [ ] CI/CD Setup with binary package available for download.
+- [ ] Integration tests with test docker containers??. 
 
 
 ## References
