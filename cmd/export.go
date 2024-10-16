@@ -84,7 +84,6 @@ func NewElasticsearch(elasticHost, elasticUser, elasticPass, elasticIndex string
 
 func (es *Elasticsearch) Export(resultChan chan *CertResult, resultWg *sync.WaitGroup) error {
 	defer resultWg.Done()
-	// Define the index settings
 	indexSettings := &types.IndexSettings{
 		Mapping: &types.MappingLimitSettings{
 			TotalFields: &types.MappingLimitSettingsTotalFields{
