@@ -33,7 +33,6 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 var (
@@ -53,6 +52,7 @@ var processCmd = &cobra.Command{
 		defer cancelFunc()
 		signals := make(chan os.Signal, 1)
 		signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+
 		go func() {
 			s := <-signals
 			log.WithFields(logrus.Fields{"state": "main"}).Infof("received %v ... cancelling context.", s.String())
@@ -61,8 +61,9 @@ var processCmd = &cobra.Command{
 			log.WithFields(logrus.Fields{"state": "main"}).Fatalf("forcing exit due to %v", s.String())
 			os.Exit(-1)
 		}()
+
 		rdb := redis.NewClient(&redis.Options{
-			Addr:     "localhost:6379",
+			Addr:     redisHost,
 			Password: "", // no password set
 			DB:       0,  // use default DB
 		})
@@ -125,5 +126,4 @@ var processCmd = &cobra.Command{
 
 func init() {
 	workerCmd.AddCommand(processCmd)
-	viper.AutomaticEnv()
 }
