@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"github.com/jedib0t/go-pretty/progress"
 	"net"
 	"regexp"
 	"sync"
@@ -119,8 +120,43 @@ func PrintProgressToConsole(refreshInterval int) {
 	}
 }
 
+func ProgressBar(refreshInterval int) {
+	p := progress.NewWriter()
+	defer p.Stop()
+	p.SetMessageWidth(24)
+	p.SetNumTrackersExpected(4)
+	p.SetStyle(progress.StyleDefault)
+	p.SetTrackerLength(40)
+	p.SetTrackerPosition(progress.PositionRight)
+	p.SetUpdateFrequency(time.Second * time.Duration(int64(refreshInterval)))
+	p.SetAutoStop(false)
+	p.Style().Colors = progress.StyleColorsExample
+	go p.Render()
+	cidrTracker := progress.Tracker{Message: "CIDR Ranges Scanned"}
+	headerTracker := progress.Tracker{Message: "Headers Grabbed"}
+	jarmTracker := progress.Tracker{Message: "JARM Fingerprints"}
+	exportTracker := progress.Tracker{Message: "Exported Results"}
+	log.Printf("starting progress bar thread")
+	p.AppendTrackers([]*progress.Tracker{&cidrTracker, &headerTracker, &jarmTracker, &exportTracker})
+	for {
+		cidrTracker.Total = cidrRangesToScan.Load()
+		cidrTracker.SetValue(cidrRangesScanned.Load())
+		headerTracker.Total = totalFindings.Load()
+		headerTracker.SetValue(serverHeadersScanned.Load())
+		jarmTracker.Total = serverHeadersScanned.Load()
+		jarmTracker.SetValue(jarmFingerprintsScanned.Load())
+		exportTracker.Total = jarmFingerprintsScanned.Load()
+		exportTracker.SetValue(resultsExported.Load())
+		if exportTracker.IsDone() && state < 4 {
+			// progress bar does not update number after it is marked "done" so keep it "undone" till we wait for export to finish
+			exportTracker.SetValue(exportTracker.Total - 1)
+		}
+		time.Sleep(time.Second)
+	}
+}
+
 func ServerHeaderEnrichment(ctx context.Context, rawResultChan chan *CertResult, enrichmentThreads int, wg *sync.WaitGroup) chan *CertResult {
-	enrichedResultChan := make(chan *CertResult, 50000)
+	enrichedResultChan := make(chan *CertResult, enrichmentThreads*2000)
 	wg.Add(enrichmentThreads)
 	for i := 0; i < enrichmentThreads; i++ {
 		go headerEnrichmentThread(ctx, rawResultChan, enrichedResultChan, wg)
@@ -129,7 +165,7 @@ func ServerHeaderEnrichment(ctx context.Context, rawResultChan chan *CertResult,
 }
 
 func JARMFingerprintEnrichment(ctx context.Context, rawResultChan chan *CertResult, enrichmentThreads int, wg *sync.WaitGroup) chan *CertResult {
-	enrichedResultChan := make(chan *CertResult, 50000)
+	enrichedResultChan := make(chan *CertResult, enrichmentThreads*2000)
 	wg.Add(enrichmentThreads)
 	for i := 0; i < enrichmentThreads; i++ {
 		go jarmFingerprintEnrichmentThread(ctx, rawResultChan, enrichedResultChan, wg)
