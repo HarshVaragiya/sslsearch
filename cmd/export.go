@@ -1,18 +1,21 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"github.com/elastic/go-elasticsearch/v8/typedapi/types"
 	"net/http"
 	"os"
 	"strings"
 	"sync"
 	"time"
 
+	"compress/gzip"
+
 	elasticsearch "github.com/elastic/go-elasticsearch/v8"
+	"github.com/elastic/go-elasticsearch/v8/esutil"
 	"github.com/gocql/gocql"
 	"github.com/sirupsen/logrus"
 )
@@ -51,17 +54,20 @@ type Elasticsearch struct {
 	elasticUser  string
 	elasticPass  string
 	elasticIndex string
-	client       *elasticsearch.TypedClient
+	client       *elasticsearch.Client
+	indexer      esutil.BulkIndexer
 }
 
 func NewElasticsearch(elasticHost, elasticUser, elasticPass, elasticIndex string) (*Elasticsearch, error) {
-	client, err := elasticsearch.NewTypedClient(elasticsearch.Config{
-		Addresses:     []string{elasticsearchHost},
-		Username:      elasticsearchUsername,
-		Password:      elasticsearchPassword,
-		EnableMetrics: true,
-		//CompressRequestBody:      true,
-		//CompressRequestBodyLevel: gzip.DefaultCompression,
+	client, err := elasticsearch.NewClient(elasticsearch.Config{
+		Addresses:                []string{elasticsearchHost},
+		Username:                 elasticsearchUsername,
+		Password:                 elasticsearchPassword,
+		EnableMetrics:            true,
+		RetryBackoff:             func(i int) time.Duration { return time.Duration(i*10) * time.Second },
+		MaxRetries:               15,
+		CompressRequestBody:      true,
+		CompressRequestBodyLevel: gzip.DefaultCompression,
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: true,
@@ -72,39 +78,71 @@ func NewElasticsearch(elasticHost, elasticUser, elasticPass, elasticIndex string
 		log.WithFields(logrus.Fields{"state": "elastic", "errmsg": err}).Errorf("error creating elasticsearch client")
 		return nil, err
 	}
+	indexer, err := esutil.NewBulkIndexer(esutil.BulkIndexerConfig{
+		Client:     client,       // The Elasticsearch client
+		Index:      elasticIndex, // The default index name
+		NumWorkers: 4,            // The number of worker goroutines (default: number of CPUs)
+		FlushBytes: 5e+6,         // The flush threshold in bytes (default: 5M)
+	})
+	if err != nil {
+		log.WithFields(logrus.Fields{"state": "elastic", "errmsg": err}).Errorf("error creating elasticsearch bulk indexer")
+		return nil, err
+	}
 	return &Elasticsearch{
 		elasticHost:  elasticsearchHost,
 		elasticUser:  elasticsearchUsername,
 		elasticPass:  elasticsearchPassword,
 		elasticIndex: elasticsearchIndex,
 		client:       client,
+		indexer:      indexer,
 	}, nil
 }
 
 func (es *Elasticsearch) Export(resultChan chan *CertResult, resultWg *sync.WaitGroup) error {
 	defer resultWg.Done()
-	indexSettings := &types.IndexSettings{
-		Mapping: &types.MappingLimitSettings{
-			TotalFields: &types.MappingLimitSettingsTotalFields{
-				Limit: intPtr(50000),
+	indexSettings := map[string]interface{}{
+		"settings": map[string]interface{}{
+			"number_of_shards": 10,
+			"mapping": map[string]interface{}{
+				"total_fields": map[string]interface{}{
+					"limit": 50000,
+				},
 			},
 		},
-		NumberOfShards: "10",
 	}
-	req := es.client.Indices.Create(es.elasticIndex)
-	req.Settings(indexSettings)
-	if _, err := req.Do(context.TODO()); err != nil {
-		log.WithFields(logrus.Fields{"state": "elastic"}).Errorf("error creating elasticsearch index. error = %v", err)
+	body, _ := json.Marshal(indexSettings)
+	resp, err := es.client.Indices.Create(es.elasticIndex, es.client.Indices.Create.WithBody(
+		bytes.NewReader(body),
+	))
+	if err != nil {
+		log.WithFields(logrus.Fields{"state": "elastic", "errmsg": err}).Fatal("error creating elasticsearch index")
+	} else if resp.IsError() && resp.StatusCode != 400 {
+		log.WithFields(logrus.Fields{"state": "elastic", "errmsg": resp.String()}).Fatal("error creating elasticsearch index. invalid response")
 	}
 	log.WithFields(logrus.Fields{"state": "elastic"}).Infof("exporting to elasticsearch index: %s", elasticsearchIndex)
 	for result := range resultChan {
-		if _, err := es.client.Index(elasticsearchIndex).Request(result).Do(context.TODO()); err != nil {
-			log.WithFields(logrus.Fields{"state": "elastic"}).Errorf("error exporting result to elasticsearch. error = %v", err)
-		} else {
-			resultsExported.Add(1)
+		resultBytes, err := json.Marshal(result)
+		if err != nil {
+			log.WithFields(logrus.Fields{"state": "elastic", "errmsg": err}).Infof("error marshalling result to JSON")
+
+		}
+		err = es.indexer.Add(context.TODO(), esutil.BulkIndexerItem{
+			Action: "index",
+			Body:   bytes.NewReader(resultBytes),
+			OnSuccess: func(ctx context.Context, item esutil.BulkIndexerItem, res esutil.BulkIndexerResponseItem) {
+				resultsExported.Add(1)
+			},
+		})
+		if err != nil {
+			log.WithFields(logrus.Fields{"state": "elastic", "errmsg": err}).Errorf("error exporting result to elasticsearch")
 		}
 		resultsProcessed.Add(1)
 	}
+	if err := es.indexer.Close(context.TODO()); err != nil {
+		log.WithFields(logrus.Fields{"state": "elastic", "errmsg": err}).Errorf("error flusing bulk indexer")
+	}
+	stats := es.indexer.Stats()
+	log.WithFields(logrus.Fields{"state": "elastic"}).Infof("indexed %d documents with %d errors", stats.NumFlushed, stats.NumFailed)
 	return nil
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"net"
 	"os"
 	"os/signal"
@@ -145,8 +146,11 @@ func RunScan(cidrChan chan CidrRange) {
 	exportTarget := GetExportTarget()
 	go exportTarget.Export(enrichedResultChan, resultWg)
 
-	go ProgressBar(consoleRefreshSeconds)
-	//go PrintProgressToConsole(consoleRefreshSeconds)
+	if consoleProgressLog {
+		go PrintProgressToConsole(consoleRefreshSeconds)
+	} else {
+		go ProgressBar(consoleRefreshSeconds)
+	}
 
 	// wait for tls scanning to finish
 	state = 1
@@ -215,9 +219,11 @@ func SplitCIDR(cidrString CidrRange, suffixLenPerGoRoutine int, cidrChan chan Ci
 		adjustPrefixLength = 0
 	}
 	for i := cidr.AdjustPrefixLen(adjustPrefixLength).PrefixBlockIterator(); i.HasNext(); {
-		nextCidr := i.Next().String()
-		cidrChan <- CidrRange{Cidr: nextCidr, CSP: cidrString.CSP, Region: cidrString.Region}
+		nextCidr := i.Next()
+		cidrChan <- CidrRange{Cidr: nextCidr.String(), CSP: cidrString.CSP, Region: cidrString.Region}
+		log.WithFields(logrus.Fields{"state": "split-cidr"}).Debugf("added cidr range %s for scanning", nextCidr)
 		cidrRangesToScan.Add(1)
+		ipsToScan.Add(int64(math.Pow(2, float64(32-nextCidr.GetPrefixLen().Len()))))
 	}
 	return nil
 }
