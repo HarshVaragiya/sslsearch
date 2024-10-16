@@ -112,7 +112,7 @@ func PrintProgressToConsole(refreshInterval int) {
 		targetsScannedSinceRefresh := ipScanRate.Load()
 		ipScanRate.Store(0)
 		scanRate := float64(targetsScannedSinceRefresh) / float64(refreshInterval)
-		fmt.Printf("Progress: CIDRs [ %v / %v ]  IPs Scanned: %v / %v | Findings: %v | Headers Grabbed: %v / %v | JARM: %v / %v |  Export: %v / %v  | Rate: %.2f  ips/sec         \r",
+		fmt.Printf("Progress: CIDRs [ %v / %v ]  IPs Scanned: %v / %v | Findings: %v | Headers Grabbed: %v / %v | JARM: %v / %v |  Export: %v / %v  | Rate: %.2f  ips/sec         \n",
 			cidrRangesScanned.Load(), cidrRangesToScan.Load(),
 			ipsScanned.Load(), ipsToScan.Load(), totalFindings.Load(),
 			serverHeadersGrabbed.Load(), serverHeadersScanned.Load(),
