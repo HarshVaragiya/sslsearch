@@ -76,6 +76,7 @@ var processCmd = &cobra.Command{
 			if err != nil {
 				log.WithFields(logrus.Fields{"state": "process", "errmsg": err, "type": "mgmt"}).Error("error popping task from queue")
 				time.Sleep(time.Second * 30)
+				continue
 			}
 			go PrintProgressToConsole(1)
 			var cidrRange CidrRange
