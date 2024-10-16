@@ -72,10 +72,10 @@ var processCmd = &cobra.Command{
 		for {
 			exportTarget := GetExportTarget()
 			initialResultChan := make(chan *CertResult, 1024)
-			log.WithFields(logrus.Fields{"state": "process", "type": "mgmt", "namespace": taskQueue}).Info("getting next task from queue")
+			log.WithFields(logrus.Fields{"state": "process", "type": "mgmt", "namespace": taskQueue}).Debugf("getting next task from queue")
 			data, err := rdb.LPop(ctx, taskQueue).Bytes()
 			if err != nil {
-				log.WithFields(logrus.Fields{"state": "process", "errmsg": err, "type": "mgmt"}).Error("error popping task from queue")
+				log.WithFields(logrus.Fields{"state": "process", "errmsg": err, "type": "mgmt"}).Errorf("error popping task from queue")
 				time.Sleep(time.Second * 30)
 				continue
 			}
@@ -108,16 +108,16 @@ var processCmd = &cobra.Command{
 			resultWg := &sync.WaitGroup{}
 			resultWg.Add(1)
 			go exportTarget.Export(enrichedResultChan, resultWg)
-			log.WithFields(logrus.Fields{"state": "process", "csp": cidrRange.CSP, "region": cidrRange.Region, "cidr": cidrRange.Cidr}).Infof("started all processing threads")
+			log.WithFields(logrus.Fields{"state": "process", "csp": cidrRange.CSP, "region": cidrRange.Region, "cidr": cidrRange.Cidr}).Debugf("started all processing threads")
 			scanWg.Wait()
 			close(initialResultChan)
-			log.WithFields(logrus.Fields{"state": "process", "csp": cidrRange.CSP, "region": cidrRange.Region, "cidr": cidrRange.Cidr}).Infof("tls scanning finished")
+			log.WithFields(logrus.Fields{"state": "process", "csp": cidrRange.CSP, "region": cidrRange.Region, "cidr": cidrRange.Cidr}).Debugf("tls scanning finished")
 			serverHeaderWg.Wait()
 			close(headerEnrichedResultsChan)
-			log.WithFields(logrus.Fields{"state": "process", "csp": cidrRange.CSP, "region": cidrRange.Region, "cidr": cidrRange.Cidr}).Infof("server header grabbing finished")
+			log.WithFields(logrus.Fields{"state": "process", "csp": cidrRange.CSP, "region": cidrRange.Region, "cidr": cidrRange.Cidr}).Debugf("server header grabbing finished")
 			jarmFingerprintWg.Wait()
 			close(enrichedResultChan)
-			log.WithFields(logrus.Fields{"state": "process", "csp": cidrRange.CSP, "region": cidrRange.Region, "cidr": cidrRange.Cidr}).Infof("jarm fingerprinting finished")
+			log.WithFields(logrus.Fields{"state": "process", "csp": cidrRange.CSP, "region": cidrRange.Region, "cidr": cidrRange.Cidr}).Debugf("jarm fingerprinting finished")
 			resultWg.Wait()
 			log.WithFields(logrus.Fields{"state": "process", "csp": cidrRange.CSP, "region": cidrRange.Region, "cidr": cidrRange.Cidr}).Infof("result exporting finished")
 		}
