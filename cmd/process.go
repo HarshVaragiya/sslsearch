@@ -79,7 +79,7 @@ var processCmd = &cobra.Command{
 				time.Sleep(time.Second * 30)
 				continue
 			}
-			go PrintProgressToConsole(1)
+			go PrintProgressToConsole(consoleRefreshSeconds)
 			var cidrRange CidrRange
 			if err = json.Unmarshal(data, &cidrRange); err != nil {
 				log.WithFields(logrus.Fields{"state": "process", "errmsg": err, "type": "mgmt"}).Error("error parsing task")
