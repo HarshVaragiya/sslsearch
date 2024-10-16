@@ -128,7 +128,7 @@ func ProgressBar(refreshInterval int) {
 	p.SetStyle(progress.StyleDefault)
 	p.SetTrackerLength(40)
 	p.SetTrackerPosition(progress.PositionRight)
-	p.SetUpdateFrequency(time.Second * 1)
+	p.SetUpdateFrequency(time.Second * time.Duration(int64(refreshInterval)))
 	p.SetAutoStop(false)
 	p.Style().Colors = progress.StyleColorsExample
 	go p.Render()
@@ -151,7 +151,7 @@ func ProgressBar(refreshInterval int) {
 			// progress bar does not update number after it is marked "done" so keep it "undone" till we wait for export to finish
 			exportTracker.SetValue(exportTracker.Total - 1)
 		}
-		time.Sleep(time.Second * time.Duration(int64(refreshInterval)))
+		time.Sleep(time.Second)
 	}
 }
 

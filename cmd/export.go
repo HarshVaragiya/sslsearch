@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"compress/gzip"
 	"context"
 	"crypto/tls"
 	"encoding/json"
@@ -57,12 +56,12 @@ type Elasticsearch struct {
 
 func NewElasticsearch(elasticHost, elasticUser, elasticPass, elasticIndex string) (*Elasticsearch, error) {
 	client, err := elasticsearch.NewTypedClient(elasticsearch.Config{
-		Addresses:                []string{elasticsearchHost},
-		Username:                 elasticsearchUsername,
-		Password:                 elasticsearchPassword,
-		EnableMetrics:            true,
-		CompressRequestBody:      true,
-		CompressRequestBodyLevel: gzip.BestCompression,
+		Addresses:     []string{elasticsearchHost},
+		Username:      elasticsearchUsername,
+		Password:      elasticsearchPassword,
+		EnableMetrics: true,
+		//CompressRequestBody:      true,
+		//CompressRequestBodyLevel: gzip.DefaultCompression,
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: true,
