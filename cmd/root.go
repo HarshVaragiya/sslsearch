@@ -59,12 +59,14 @@ var (
 	elasticsearchUsername       string
 	elasticsearchPassword       string
 	elasticsearchIndex          string
+	consoleProgressLog          bool
 )
 
 var (
 	log                     = logrus.New()
 	cidrRangesToScan        = atomic.Int64{}
 	cidrRangesScanned       = atomic.Int64{}
+	ipsToScan               = atomic.Int64{}
 	ipsScanned              = atomic.Int64{}
 	ipScanRate              = atomic.Int64{}
 	totalFindings           = atomic.Int64{}
@@ -148,6 +150,7 @@ func init() {
 	rootCmd.PersistentFlags().BoolVarP(&debugFlag, "debug", "v", false, "enable debug logs")
 	rootCmd.PersistentFlags().IntVar(&cidrSuffixPerGoRoutine, "suffix", 4, "CIDR suffix per goroutine [each thread will scan 2^x IPs]")
 	rootCmd.PersistentFlags().IntVar(&tcpTimeout, "timeout", 10, "tcp connection timeout in seconds")
+	rootCmd.PersistentFlags().BoolVar(&consoleProgressLog, "console-progress", false, "print progress notes in console instead of progress bar")
 
 	// Export to disk
 	rootCmd.PersistentFlags().BoolVar(&diskExport, "export.disk", false, "export findings to disk")

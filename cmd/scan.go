@@ -4,13 +4,14 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"github.com/jedib0t/go-pretty/progress"
 	"net"
 	"regexp"
 	"sync"
 	"time"
 
-	logrus "github.com/sirupsen/logrus"
+	"github.com/jedib0t/go-pretty/progress"
+
+	"github.com/sirupsen/logrus"
 )
 
 func ScanCertificatesInCidr(ctx context.Context, cidrChan chan CidrRange, ports []string, resultChan chan *CertResult, wg *sync.WaitGroup, keywordRegexString string) {
@@ -19,7 +20,7 @@ func ScanCertificatesInCidr(ctx context.Context, cidrChan chan CidrRange, ports 
 	for {
 		select {
 		case <-ctx.Done():
-			log.WithFields(logrus.Fields{"state": "scan"}).Tracef("context done")
+			log.WithFields(logrus.Fields{"state": "scan"}).Infof("context done, skipping to exit")
 			return
 		case cidr, open := <-cidrChan:
 			if !open {
@@ -110,9 +111,9 @@ func PrintProgressToConsole(refreshInterval int) {
 		targetsScannedSinceRefresh := ipScanRate.Load()
 		ipScanRate.Store(0)
 		scanRate := float64(targetsScannedSinceRefresh) / float64(refreshInterval)
-		fmt.Printf("Progress: CIDRs [ %v / %v ]  IPs Scanned: %v | Findings: %v | Headers Grabbed: %v / %v | JARM: %v / %v |  Export: %v / %v  | Rate: %.2f  ips/sec         \r",
+		fmt.Printf("Progress: CIDRs [ %v / %v ]  IPs Scanned: %v / %v | Findings: %v | Headers Grabbed: %v / %v | JARM: %v / %v |  Export: %v / %v  | Rate: %.2f  ips/sec         \r",
 			cidrRangesScanned.Load(), cidrRangesToScan.Load(),
-			ipsScanned.Load(), totalFindings.Load(),
+			ipsScanned.Load(), ipsToScan.Load(), totalFindings.Load(),
 			serverHeadersGrabbed.Load(), serverHeadersScanned.Load(),
 			jarmFingerprintsGrabbed.Load(), jarmFingerprintsScanned.Load(),
 			resultsExported.Load(), resultsProcessed.Load(), scanRate)
@@ -124,7 +125,7 @@ func ProgressBar(refreshInterval int) {
 	p := progress.NewWriter()
 	defer p.Stop()
 	p.SetMessageWidth(24)
-	p.SetNumTrackersExpected(4)
+	p.SetNumTrackersExpected(5)
 	p.SetStyle(progress.StyleDefault)
 	p.SetTrackerLength(40)
 	p.SetTrackerPosition(progress.PositionRight)
@@ -133,21 +134,36 @@ func ProgressBar(refreshInterval int) {
 	p.Style().Colors = progress.StyleColorsExample
 	go p.Render()
 	cidrTracker := progress.Tracker{Message: "CIDR Ranges Scanned"}
+	ipTracker := progress.Tracker{Message: "IP Addresses Scanned"}
 	headerTracker := progress.Tracker{Message: "Headers Grabbed"}
 	jarmTracker := progress.Tracker{Message: "JARM Fingerprints"}
 	exportTracker := progress.Tracker{Message: "Exported Results"}
 	log.Printf("starting progress bar thread")
-	p.AppendTrackers([]*progress.Tracker{&cidrTracker, &headerTracker, &jarmTracker, &exportTracker})
+	p.AppendTrackers([]*progress.Tracker{&cidrTracker, &ipTracker, &headerTracker, &jarmTracker, &exportTracker})
 	for {
 		cidrTracker.Total = cidrRangesToScan.Load()
 		cidrTracker.SetValue(cidrRangesScanned.Load())
+		if cidrTracker.IsDone() && state < 2 {
+			cidrTracker.SetValue(cidrTracker.Total - 1)
+		}
+		ipTracker.Total = ipsToScan.Load()
+		ipTracker.SetValue(ipsScanned.Load())
+		if ipTracker.IsDone() && state < 2 {
+			ipTracker.SetValue(ipTracker.Total - 1)
+		}
 		headerTracker.Total = totalFindings.Load()
 		headerTracker.SetValue(serverHeadersScanned.Load())
+		if headerTracker.IsDone() && state < 3 {
+			headerTracker.SetValue(headerTracker.Total - 1)
+		}
 		jarmTracker.Total = serverHeadersScanned.Load()
 		jarmTracker.SetValue(jarmFingerprintsScanned.Load())
+		if jarmTracker.IsDone() && state < 4 {
+			jarmTracker.SetValue(jarmTracker.Total - 1)
+		}
 		exportTracker.Total = jarmFingerprintsScanned.Load()
 		exportTracker.SetValue(resultsExported.Load())
-		if exportTracker.IsDone() && state < 4 {
+		if exportTracker.IsDone() && state < 5 {
 			// progress bar does not update number after it is marked "done" so keep it "undone" till we wait for export to finish
 			exportTracker.SetValue(exportTracker.Total - 1)
 		}
