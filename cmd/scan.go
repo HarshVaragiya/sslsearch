@@ -20,7 +20,7 @@ func ScanCertificatesInCidr(ctx context.Context, cidrChan chan CidrRange, ports 
 	for {
 		select {
 		case <-ctx.Done():
-			log.WithFields(logrus.Fields{"state": "scan"}).Infof("context done, skipping to exit")
+			log.WithFields(logrus.Fields{"state": "scan"}).Tracef("context done, skipping to exit")
 			return
 		case cidr, open := <-cidrChan:
 			if !open {
@@ -95,15 +95,16 @@ func ScanRemote(ctx context.Context, ip net.IP, port string, keywordRegex *regex
 func Summarize(start, stop time.Time) {
 	elapsedTime := stop.Sub(start)
 	percentage := float64(ipsScanned.Load()) / TOTAL_IPv4_ADDR_COUNT
-	fmt.Printf("Total IPs Scanned           : %v (%v %% of the internet)\n", ipsScanned.Load(), percentage)
+	ipsPerSecond := float64(1000000000*ipsScanned.Load()) / float64(elapsedTime)
+	findingsPerSecond := float64(1000000000*totalFindings.Load()) / float64(elapsedTime)
+	fmt.Printf("Total IPs Scanned           : %v / %v (%.8f %% of the internet)\n", ipsScanned.Load(), ipsToScan.Load(), percentage)
 	fmt.Printf("Total Findings              : %v \n", totalFindings.Load())
 	fmt.Printf("Total CIDR ranges Scanned   : %v \n", cidrRangesScanned.Load())
-	fmt.Printf("Time Elapsed                : %v \n", elapsedTime)
 	fmt.Printf("Server Headers              : %v / %v \n", serverHeadersGrabbed.Load(), serverHeadersScanned.Load())
 	fmt.Printf("Jarm Fingerprints           : %v / %v \n", jarmFingerprintsGrabbed.Load(), jarmFingerprintsScanned.Load())
 	fmt.Printf("Results Export              : %v / %v \n", resultsExported.Load(), resultsProcessed.Load())
 	fmt.Printf("Time Elapsed                : %v \n", elapsedTime)
-	fmt.Printf("Scan Speed                  : %v IPs/second \n", float64(1000000000*ipsScanned.Load())/float64(elapsedTime))
+	fmt.Printf("Scan Speed                  : %.2f IPs/second | %.2f findings/second \n", ipsPerSecond, findingsPerSecond)
 }
 
 func PrintProgressToConsole(refreshInterval int) {

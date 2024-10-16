@@ -25,10 +25,10 @@ type ExportTarget interface {
 }
 
 type CidrRange struct {
-	Cidr   string
-	CSP    string
-	Region string
-	Meta   string
+	Cidr   string `json:"cidr"`
+	CSP    string `json:"csp"`
+	Region string `json:"region"`
+	Meta   string `json:"meta"`
 }
 
 type CertResult struct {
