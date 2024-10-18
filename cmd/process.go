@@ -24,22 +24,27 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/signal"
+	"runtime/pprof"
 	"sync"
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/redis/go-redis/v9"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
 var (
-	workerThreadCount         = 1024
+	workerThreadCount         = 4096
 	workerScannerPorts        = []string{"443"}
-	workerServerHeaderThreads = 8
-	workerJarmThreads         = 32
+	workerServerHeaderThreads = 48
+	workerJarmThreads         = 128
 )
 
 // processCmd represents the process command
@@ -67,60 +72,110 @@ var processCmd = &cobra.Command{
 			Password: "", // no password set
 			DB:       0,  // use default DB
 		})
-
 		PerformOutputChecks()
+		go func() {
+			endpoint := os.Getenv("MINIO_ENDPOINT")
+			accessKey := os.Getenv("ACCESS_KEY")
+			secretKey := os.Getenv("SECRET_KEY")
+			hostname, _ := os.Hostname()
+			minioClient, err := minio.New(endpoint, &minio.Options{
+				Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
+				Secure: false,
+			})
+			if err != nil {
+				log.WithFields(logrus.Fields{"state": "profile", "type": "mgmt", "errmsg": err}).Errorf("error connecting to MinIO server")
+			}
+			for {
+				time.Sleep(time.Minute)
+				val, err := rdb.Get(ctx, "profile").Int()
+				if err != nil {
+					log.WithFields(logrus.Fields{"state": "profile", "type": "mgmt", "errmsg": err}).Debugf("error getting profile control variable")
+				}
+				if val == 1 {
+					log.WithFields(logrus.Fields{"state": "profile", "type": "mgmt"}).Infof("attempting to profile application")
+					tmpFileName := "/tmp/" + uuid.NewString() + ".prof"
+					tmpFile, err := os.Create(tmpFileName)
+					if err != nil {
+						log.WithFields(logrus.Fields{"state": "profile", "type": "mgmt", "errmsg": err}).Errorf("error creating tmp file for profiling")
+						continue
+					}
+					err = pprof.StartCPUProfile(tmpFile)
+					if err != nil {
+						log.WithFields(logrus.Fields{"state": "profile", "type": "mgmt", "errmsg": err}).Errorf("error starting profiling")
+						continue
+					}
+					time.Sleep(time.Minute)
+					pprof.StopCPUProfile()
+					tmpFile.Close()
+					objectName := fmt.Sprintf("profiles/%s-%s.prof", hostname, time.Now().Format("2006-01-02-15-04-05"))
+					info, err := minioClient.FPutObject(ctx, "projects-sslsearch", objectName, tmpFileName, minio.PutObjectOptions{ContentType: "application/octet-stream"})
+					if err != nil {
+						log.WithFields(logrus.Fields{"state": "profile", "type": "mgmt", "errmsg": err}).Errorf("error uploading profile to minio server")
+						continue
+					}
+					log.WithFields(logrus.Fields{"state": "profile", "type": "mgmt"}).Infof("uploaded profile '%s' of size %d bytes", info.Key, info.Size)
+				}
+			}
+		}()
+
+		exportTarget := GetExportTarget()
+		initialResultChan := make(chan *CertResult, workerThreadCount*32)
+		scanWg := &sync.WaitGroup{}
+		scanWg.Add(workerThreadCount)
+		processCidrRange := make(chan CidrRange, workerThreadCount*2)
+		log.WithFields(logrus.Fields{"state": "process"}).Debugf("starting tls scanning threads")
+		for i := 0; i < workerThreadCount; i++ {
+			go ScanCertificatesInCidr(ctx, processCidrRange, workerScannerPorts, initialResultChan, scanWg, ".*")
+		}
+		log.WithFields(logrus.Fields{"state": "process"}).Debugf("starting header grabbing threads")
+		serverHeaderWg := &sync.WaitGroup{}
+		headerEnrichedResultsChan := ServerHeaderEnrichment(ctx, initialResultChan, workerServerHeaderThreads, serverHeaderWg)
+		log.WithFields(logrus.Fields{"state": "process"}).Debugf("starting jarm fingerprinting")
+		jarmFingerprintWg := &sync.WaitGroup{}
+		enrichedResultChan := JARMFingerprintEnrichment(ctx, headerEnrichedResultsChan, workerJarmThreads, jarmFingerprintWg)
+		log.WithFields(logrus.Fields{"state": "process"}).Debugf("starting export thread")
+		resultWg := &sync.WaitGroup{}
+		resultWg.Add(1)
+		go exportTarget.Export(enrichedResultChan, resultWg)
+		log.WithFields(logrus.Fields{"state": "process"}).Info("started all processing threads")
+
+	WorkerLoop:
 		for {
-			exportTarget := GetExportTarget()
-			initialResultChan := make(chan *CertResult, 1024)
 			log.WithFields(logrus.Fields{"state": "process", "type": "mgmt", "namespace": taskQueue}).Debugf("getting next task from queue")
+			select {
+			case <-ctx.Done():
+				log.WithFields(logrus.Fields{"state": "process", "type": "mgmt"}).Infof("context done. exiting worker loop")
+				break WorkerLoop
+			default:
+				break
+			}
 			data, err := rdb.LPop(ctx, taskQueue).Bytes()
 			if err != nil {
 				log.WithFields(logrus.Fields{"state": "process", "errmsg": err, "type": "mgmt"}).Errorf("error popping task from queue")
 				time.Sleep(time.Second * 30)
 				continue
 			}
-			go PrintProgressToConsole(consoleRefreshSeconds)
+			// go PrintProgressToConsole(consoleRefreshSeconds)
 			var cidrRange CidrRange
 			if err = json.Unmarshal(data, &cidrRange); err != nil {
 				log.WithFields(logrus.Fields{"state": "process", "errmsg": err, "type": "mgmt"}).Error("error parsing task")
 			}
 			log.WithFields(logrus.Fields{"state": "process", "csp": cidrRange.CSP, "region": cidrRange.Region, "cidr": cidrRange.Cidr}).Infof("processing task")
+			SplitCIDR(cidrRange, cidrSuffixPerGoRoutine, processCidrRange)
 
-			scanWg := &sync.WaitGroup{}
-			scanWg.Add(workerThreadCount)
-			log.WithFields(logrus.Fields{"state": "process", "csp": cidrRange.CSP, "region": cidrRange.Region, "cidr": cidrRange.Cidr}).Debugf("starting cidr-split task")
-			processCidrRange := make(chan CidrRange, 1024)
-			go func() {
-				SplitCIDR(cidrRange, cidrSuffixPerGoRoutine, processCidrRange)
-				close(processCidrRange)
-			}()
-			log.WithFields(logrus.Fields{"state": "process", "csp": cidrRange.CSP, "region": cidrRange.Region, "cidr": cidrRange.Cidr}).Debugf("starting tls scanning threads")
-			for i := 0; i < workerThreadCount; i++ {
-				go ScanCertificatesInCidr(ctx, processCidrRange, workerScannerPorts, initialResultChan, scanWg, ".*")
-			}
-			log.WithFields(logrus.Fields{"state": "process", "csp": cidrRange.CSP, "region": cidrRange.Region, "cidr": cidrRange.Cidr}).Debugf("starting header grabbing threads")
-			serverHeaderWg := &sync.WaitGroup{}
-			headerEnrichedResultsChan := ServerHeaderEnrichment(ctx, initialResultChan, workerServerHeaderThreads, serverHeaderWg)
-			log.WithFields(logrus.Fields{"state": "process", "csp": cidrRange.CSP, "region": cidrRange.Region, "cidr": cidrRange.Cidr}).Debugf("starting jarm fingerprinting")
-			jarmFingerprintWg := &sync.WaitGroup{}
-			enrichedResultChan := JARMFingerprintEnrichment(ctx, headerEnrichedResultsChan, workerJarmThreads, jarmFingerprintWg)
-			log.WithFields(logrus.Fields{"state": "process", "csp": cidrRange.CSP, "region": cidrRange.Region, "cidr": cidrRange.Cidr}).Debugf("starting export thread")
-			resultWg := &sync.WaitGroup{}
-			resultWg.Add(1)
-			go exportTarget.Export(enrichedResultChan, resultWg)
-			log.WithFields(logrus.Fields{"state": "process", "csp": cidrRange.CSP, "region": cidrRange.Region, "cidr": cidrRange.Cidr}).Debugf("started all processing threads")
-			scanWg.Wait()
-			close(initialResultChan)
-			log.WithFields(logrus.Fields{"state": "process", "csp": cidrRange.CSP, "region": cidrRange.Region, "cidr": cidrRange.Cidr}).Debugf("tls scanning finished")
-			serverHeaderWg.Wait()
-			close(headerEnrichedResultsChan)
-			log.WithFields(logrus.Fields{"state": "process", "csp": cidrRange.CSP, "region": cidrRange.Region, "cidr": cidrRange.Cidr}).Debugf("server header grabbing finished")
-			jarmFingerprintWg.Wait()
-			close(enrichedResultChan)
-			log.WithFields(logrus.Fields{"state": "process", "csp": cidrRange.CSP, "region": cidrRange.Region, "cidr": cidrRange.Cidr}).Debugf("jarm fingerprinting finished")
-			resultWg.Wait()
-			log.WithFields(logrus.Fields{"state": "process", "csp": cidrRange.CSP, "region": cidrRange.Region, "cidr": cidrRange.Cidr}).Infof("result exporting finished")
 		}
+		log.WithFields(logrus.Fields{"state": "process", "type": "mgmt"}).Infof("waiting for scanner threads to finish!")
+		scanWg.Wait()
+		close(initialResultChan)
+		log.WithFields(logrus.Fields{"state": "process"}).Info("tls scanning finished")
+		serverHeaderWg.Wait()
+		close(headerEnrichedResultsChan)
+		log.WithFields(logrus.Fields{"state": "process"}).Info("server header grabbing finished")
+		jarmFingerprintWg.Wait()
+		close(enrichedResultChan)
+		log.WithFields(logrus.Fields{"state": "process"}).Info("jarm fingerprinting finished")
+		resultWg.Wait()
+		log.WithFields(logrus.Fields{"state": "process"}).Infof("result exporting finished")
 	},
 }
 

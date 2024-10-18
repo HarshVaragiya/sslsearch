@@ -102,10 +102,10 @@ func (es *Elasticsearch) Export(resultChan chan *CertResult, resultWg *sync.Wait
 	defer resultWg.Done()
 	indexSettings := map[string]interface{}{
 		"settings": map[string]interface{}{
-			"number_of_shards": 10,
+			"number_of_shards": 25,
 			"mapping": map[string]interface{}{
 				"total_fields": map[string]interface{}{
-					"limit": 50000,
+					"limit": 60000,
 				},
 			},
 		},
