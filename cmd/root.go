@@ -32,8 +32,8 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	"github.com/valyala/fasthttp"
 	"github.com/spf13/viper"
+	"github.com/valyala/fasthttp"
 )
 
 var (
@@ -68,6 +68,8 @@ var (
 	cidrRangesToScan        = atomic.Int64{}
 	cidrRangesScanned       = atomic.Int64{}
 	ipsToScan               = atomic.Int64{}
+	ipsErrConn              = atomic.Int64{}
+	ipsErrNoTls             = atomic.Int64{}
 	ipsScanned              = atomic.Int64{}
 	ipScanRate              = atomic.Int64{}
 	totalFindings           = atomic.Int64{}
@@ -79,7 +81,7 @@ var (
 	resultsProcessed        = atomic.Int64{}
 	jarmRetryCount          = 3
 	tcpTimeout              = 10
-	consoleRefreshSeconds   = 5000
+	consoleRefreshSeconds   = 5
 
 	state = 1
 

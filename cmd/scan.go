@@ -68,11 +68,13 @@ func ScanRemote(ctx context.Context, ip net.IP, port string, keywordRegex *regex
 		ipsScanned.Add(1)
 		ipScanRate.Add(1)
 		if err != nil {
+			ipsErrConn.Add(1)
 			return nil, errConn
 		}
 		defer conn.Close()
 		certs := conn.ConnectionState().PeerCertificates
 		if len(certs) == 0 {
+			ipsErrNoTls.Add(1)
 			return nil, errNoTls
 		}
 		subjectMatch := keywordRegex.MatchString(certs[0].Subject.String())

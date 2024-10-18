@@ -60,9 +60,9 @@ type Elasticsearch struct {
 
 func NewElasticsearch(elasticHost, elasticUser, elasticPass, elasticIndex string) (*Elasticsearch, error) {
 	client, err := elasticsearch.NewClient(elasticsearch.Config{
-		Addresses:                []string{elasticsearchHost},
-		Username:                 elasticsearchUsername,
-		Password:                 elasticsearchPassword,
+		Addresses:                []string{elasticHost},
+		Username:                 elasticUser,
+		Password:                 elasticPass,
 		EnableMetrics:            true,
 		RetryBackoff:             func(i int) time.Duration { return time.Duration(i*10) * time.Second },
 		MaxRetries:               15,
@@ -81,18 +81,19 @@ func NewElasticsearch(elasticHost, elasticUser, elasticPass, elasticIndex string
 	indexer, err := esutil.NewBulkIndexer(esutil.BulkIndexerConfig{
 		Client:     client,       // The Elasticsearch client
 		Index:      elasticIndex, // The default index name
-		NumWorkers: 4,            // The number of worker goroutines (default: number of CPUs)
-		FlushBytes: 5e+6,         // The flush threshold in bytes (default: 5M)
+		NumWorkers: 1,            // The number of worker goroutines (default: number of CPUs)
+		FlushBytes: 1e+6,         // The flush threshold in bytes 1M
 	})
 	if err != nil {
 		log.WithFields(logrus.Fields{"state": "elastic", "errmsg": err}).Errorf("error creating elasticsearch bulk indexer")
 		return nil, err
 	}
+	log.WithFields(logrus.Fields{"state": "elastic"}).Infof("exporting to elasticsearch at: %s", elasticsearchHost)
 	return &Elasticsearch{
-		elasticHost:  elasticsearchHost,
-		elasticUser:  elasticsearchUsername,
-		elasticPass:  elasticsearchPassword,
-		elasticIndex: elasticsearchIndex,
+		elasticHost:  elasticHost,
+		elasticUser:  elasticUser,
+		elasticPass:  elasticPass,
+		elasticIndex: elasticIndex,
 		client:       client,
 		indexer:      indexer,
 	}, nil
@@ -102,7 +103,7 @@ func (es *Elasticsearch) Export(resultChan chan *CertResult, resultWg *sync.Wait
 	defer resultWg.Done()
 	indexSettings := map[string]interface{}{
 		"settings": map[string]interface{}{
-			"number_of_shards": 25,
+			"number_of_shards": 20,
 			"mapping": map[string]interface{}{
 				"total_fields": map[string]interface{}{
 					"limit": 60000,
@@ -131,6 +132,9 @@ func (es *Elasticsearch) Export(resultChan chan *CertResult, resultWg *sync.Wait
 			Body:   bytes.NewReader(resultBytes),
 			OnSuccess: func(ctx context.Context, item esutil.BulkIndexerItem, res esutil.BulkIndexerResponseItem) {
 				resultsExported.Add(1)
+			},
+			OnFailure: func(ctx context.Context, item esutil.BulkIndexerItem, item2 esutil.BulkIndexerResponseItem, err error) {
+				log.WithFields(logrus.Fields{"state": "elastic", "errmsg": err}).Errorf("error exporting result to elasticsearch")
 			},
 		})
 		if err != nil {

@@ -24,12 +24,22 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"github.com/google/uuid"
+	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
+)
+
+var (
+	jobName        string
+	jobDescription string
+	jobExportIndex string
+	targetCsps     string
 )
 
 // addCmd represents the add command
@@ -38,13 +48,49 @@ var addCmd = &cobra.Command{
 	Short: "add jobs to worker queue",
 	Run: func(cmd *cobra.Command, args []string) {
 
+		if redisHost == "" {
+			redisHost = os.Getenv("REDIS_HOST")
+			if redisHost == "" {
+				log.Fatalf("missing required parameter for redis host")
+			}
+		}
+
 		rdb := redis.NewClient(&redis.Options{
 			Addr:     redisHost,
 			Password: "", // no password set
 			DB:       0,  // use default DB
 		})
 
-		cspStrings := strings.Split(workerTargets, ",")
+		if jobName == "" {
+			jobName = fmt.Sprintf("sslsearch-%s", time.Now().Format("2006-01-02"))
+		}
+		if jobDescription == "" {
+			desc := strings.Builder{}
+			desc.WriteString(fmt.Sprintf("Job Description: %s \n", jobName))
+			desc.WriteString(fmt.Sprintf("Trigger: probably cron\n"))
+			jobDescription = desc.String()
+		}
+		if jobExportIndex == "" {
+			jobExportIndex = jobName
+		}
+
+		jobId := uuid.New().String()
+		jobTaskQueue := fmt.Sprintf("sslsearch:task-queue:%s", jobId)
+		log.Printf("creating job: %s with id: %s", jobName, jobId)
+
+		CheckRegionRegex()
+
+		job := &Job{
+			JobId:         jobId,
+			TaskQueue:     jobTaskQueue,
+			Name:          jobName,
+			Description:   jobDescription,
+			ExportIndex:   jobExportIndex,
+			Status:        "todo",
+			JobSubmitTime: time.Now(),
+		}
+
+		cspStrings := strings.Split(targetCsps, ",")
 		cidrs := make(chan CidrRange, 32)
 		subCidrs := make(chan CidrRange, 32)
 		ctx := context.Background()
@@ -73,7 +119,7 @@ var addCmd = &cobra.Command{
 						cidrs <- cidr
 					}
 				}()
-				cspInstance.GetCidrRanges(ctx, cspCidrs, ".*")
+				cspInstance.GetCidrRanges(ctx, cspCidrs, regionRegexString)
 				log.Printf("done adding all CIDR ranges for %s to job queue", cspString)
 			}
 			wg.Wait()
@@ -86,19 +132,30 @@ var addCmd = &cobra.Command{
 			if err != nil {
 				log.Fatalf("error marshalling CidrRange to JSON. error = %v", err)
 			}
-			rdb.LPush(ctx, taskQueue, data)
+			rdb.LPush(ctx, jobTaskQueue, data)
 			taskCounter += 1
 		}
-		log.Printf("task queue : %s", taskQueue)
-		listLength := rdb.LLen(ctx, taskQueue).Val()
-		log.Printf("done adding all sub-cidr ranges to job queue.")
-		log.Printf("tasks added to queue : %d", taskCounter)
+		log.Printf("task queue: %s", jobTaskQueue)
+		listLength := rdb.LLen(ctx, jobTaskQueue).Val()
 		log.Printf("task queue size      : %d", listLength)
+		log.Printf("adding job to the job queue")
+		jobData, err := json.Marshal(job)
+		if err != nil {
+			log.Errorf("error marshalling job details into JSON. error = %v", err)
+		}
+		if length, err := rdb.LPush(ctx, SSLSEARCH_JOB_QUEUE_TODO, jobData).Result(); err != nil {
+			log.Errorf("error adding job to job queue. error = %v", err)
+		} else {
+			log.Infof("job queue size: %d", length)
+		}
 	},
 }
 
 func init() {
 	workerCmd.AddCommand(addCmd)
-	viper.AutomaticEnv()
-	addCmd.PersistentFlags().StringVar(&workerTargets, "worker-targets", "aws", "target cloud service providers")
+	addCmd.PersistentFlags().StringVarP(&regionRegexString, "region-regex", "r", ".*", "regex of cloud service provider region to search")
+	addCmd.PersistentFlags().StringVar(&targetCsps, "target", "aws", "target cloud service providers list")
+	addCmd.PersistentFlags().StringVar(&jobName, "job-name", "", "job name to be put in job queue")
+	addCmd.PersistentFlags().StringVar(&jobDescription, "job-description", "", "job description to be put in job queue")
+	addCmd.PersistentFlags().StringVar(&jobExportIndex, "job-export-index", "", "job export index in elasticsearch")
 }

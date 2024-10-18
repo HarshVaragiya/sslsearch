@@ -23,12 +23,15 @@ package cmd
 
 import (
 	"github.com/spf13/cobra"
+	"time"
 )
 
+const SSLSEARCH_JOB_QUEUE_TODO = "sslsearch:jobs:todo"
+const SSLSEARCH_JOBS_IN_PROGRESS = "sslsearch:jobs:in-progress"
+const SSLSEARCH_JOB_QUEUE_DONE = "sslsearch:jobs:done"
+
 var (
-	redisHost     string
-	taskQueue     string
-	workerTargets string
+	redisHost string
 )
 
 // workerCmd represents the worker command
@@ -43,6 +46,16 @@ var workerCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(workerCmd)
 	workerCmd.PersistentFlags().StringVar(&redisHost, "redis.host", "", "redis host url")
-	workerCmd.PersistentFlags().StringVar(&taskQueue, "app.namespace", "sslsearch-tasks", "application namespace")
-	workerCmd.MarkFlagRequired("redis.host")
+
+}
+
+type Job struct {
+	JobId         string    `json:"job_id"`
+	TaskQueue     string    `json:"task_queue"`
+	Name          string    `json:"name"`
+	Description   string    `json:"description"`
+	ExportIndex   string    `json:"export_index"`
+	Status        string    `json:"status"`
+	JobSubmitTime time.Time `json:"job_submit_time"`
+	JobDoneTime   time.Time `json:"job_done_time"`
 }
