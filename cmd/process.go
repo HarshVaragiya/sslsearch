@@ -121,6 +121,7 @@ var processCmd = &cobra.Command{
 			select {
 			case <-ctx.Done():
 				log.WithFields(logrus.Fields{"state": "process", "type": "mgmt", "job-id": job.JobId}).Infof("context done. exiting worker loop")
+				close(processCidrRange)
 				break WorkerLoop
 			default:
 				break
@@ -140,6 +141,7 @@ var processCmd = &cobra.Command{
 						}
 						log.WithFields(logrus.Fields{"state": "process", "type": "mgmt", "job-id": job.JobId}).Infof("added job to done queue")
 					}
+					close(processCidrRange)
 					break WorkerLoop
 				}
 				log.WithFields(logrus.Fields{"state": "process", "errmsg": err, "type": "mgmt", "job-id": job.JobId}).Errorf("error popping task from queue")

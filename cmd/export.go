@@ -82,7 +82,7 @@ func NewElasticsearch(elasticHost, elasticUser, elasticPass, elasticIndex string
 		Client:     client,       // The Elasticsearch client
 		Index:      elasticIndex, // The default index name
 		NumWorkers: 1,            // The number of worker goroutines (default: number of CPUs)
-		FlushBytes: 1e+6,         // The flush threshold in bytes 1M
+		FlushBytes: 2e+6,         // The flush threshold in bytes 1M
 	})
 	if err != nil {
 		log.WithFields(logrus.Fields{"state": "elastic", "errmsg": err}).Errorf("error creating elasticsearch bulk indexer")
@@ -120,7 +120,7 @@ func (es *Elasticsearch) Export(resultChan chan *CertResult, resultWg *sync.Wait
 	} else if resp.IsError() && resp.StatusCode != 400 {
 		log.WithFields(logrus.Fields{"state": "elastic", "errmsg": resp.String()}).Fatal("error creating elasticsearch index. invalid response")
 	}
-	log.WithFields(logrus.Fields{"state": "elastic"}).Infof("exporting to elasticsearch index: %s", elasticsearchIndex)
+	log.WithFields(logrus.Fields{"state": "elastic"}).Infof("exporting to elasticsearch index: %s", es.elasticIndex)
 	for result := range resultChan {
 		resultBytes, err := json.Marshal(result)
 		if err != nil {

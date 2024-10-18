@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/csv"
-	"fmt"
 	"io"
 	"regexp"
 	"strings"
@@ -57,7 +56,7 @@ func (digitalOcean DigitalOcean) GetCidrRanges(ctx context.Context, cidrChan cha
 	respBody := resp.Body()
 	reader := csv.NewReader(bytes.NewReader(respBody))
 	done := false
-	fmt.Printf("DO response : %v", string(respBody))
+	//fmt.Printf("DO response : %v", string(respBody))
 	for !done {
 		select {
 		case <-ctx.Done():
