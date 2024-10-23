@@ -38,7 +38,6 @@ import (
 )
 
 var (
-	workerThreadCount         = 4096
 	workerScannerPorts        = []string{"443"}
 	workerServerHeaderThreads = 48
 	workerJarmThreads         = 128
@@ -70,6 +69,9 @@ var processCmd = &cobra.Command{
 				log.WithFields(logrus.Fields{"state": "main"}).Infof("received %v ... cancelling context.", s.String())
 				cancelFunc()
 				log.WithFields(logrus.Fields{"state": "main"}).Infof("waiting for threads to finish ...")
+				s = <-signals
+				log.WithFields(logrus.Fields{"state": "main"}).Infof("received %v ... forcing exit", s.String())
+				os.Exit(-1)
 			}
 		}()
 
@@ -79,10 +81,17 @@ var processCmd = &cobra.Command{
 			DB:       0,  // use default DB
 		})
 
+	JobLoop:
 		for {
+			select {
+			case <-ctx.Done():
+				break JobLoop
+			default:
+				log.WithFields(logrus.Fields{"state": "main"}).Infof("fetching job from job queues")
+			}
 			job, err := GetJobToBeDone(ctx, rdb)
 			if err != nil {
-				log.WithFields(logrus.Fields{"state": "process.config", "errmsg": err}).Fatalf("error getting job from redis")
+				log.WithFields(logrus.Fields{"state": "process.config", "errmsg": err}).Errorf("error getting job from redis")
 				time.Sleep(time.Minute * 5)
 				continue
 			}
@@ -90,12 +99,12 @@ var processCmd = &cobra.Command{
 			if err != nil {
 				log.WithFields(logrus.Fields{"state": "process.config", "errmsg": err}).Fatalf("error configuring elasticsearch export target")
 			}
-			initialResultChan := make(chan *CertResult, workerThreadCount*32)
+			initialResultChan := make(chan *CertResult, threadCount*32)
 			scanWg := &sync.WaitGroup{}
-			scanWg.Add(workerThreadCount)
-			processCidrRange := make(chan CidrRange, workerThreadCount*2)
+			scanWg.Add(threadCount)
+			processCidrRange := make(chan CidrRange, threadCount*2)
 			log.WithFields(logrus.Fields{"state": "process", "job-id": job.JobId}).Debugf("starting tls scanning threads")
-			for i := 0; i < workerThreadCount; i++ {
+			for i := 0; i < threadCount; i++ {
 				go ScanCertificatesInCidr(ctx, processCidrRange, workerScannerPorts, initialResultChan, scanWg, ".*")
 			}
 			log.WithFields(logrus.Fields{"state": "process", "job-id": job.JobId}).Debugf("starting header grabbing threads")
@@ -131,7 +140,7 @@ var processCmd = &cobra.Command{
 				data, err := rdb.LPop(ctx, job.TaskQueue).Bytes()
 				if err != nil {
 					if errors.Is(err, redis.Nil) {
-						log.WithFields(logrus.Fields{"state": "process", "type": "mgmt", "job-id": job.JobId}).Infof("task queue empty. trying to move it to done")
+						log.WithFields(logrus.Fields{"state": "process", "type": "mgmt", "job-id": job.JobId}).Infof("task queue empty")
 						jobString, _ := json.Marshal(job)
 						count, err := rdb.LRem(ctx, SSLSEARCH_JOBS_IN_PROGRESS, 0, jobString).Result()
 						if err != nil {

@@ -136,7 +136,7 @@ func init() {
 	viper.AutomaticEnv()
 	rootCmd.PersistentFlags().StringVarP(&keywordRegexString, "keyword-regex", "k", ".*", "case insensitive keyword regex to search in subject or SAN (ex: .*amazon.* or .* which matches all)")
 	rootCmd.PersistentFlags().StringVarP(&portsString, "ports", "p", "443", "ports to search")
-	rootCmd.PersistentFlags().IntVarP(&threadCount, "threads", "t", 1000, "number of parallel threads to use")
+	rootCmd.PersistentFlags().IntVarP(&threadCount, "threads", "t", 4096, "number of parallel threads to use")
 	rootCmd.PersistentFlags().IntVar(&consoleRefreshSeconds, "refresh", 5, "console progress refresh in seconds")
 	rootCmd.PersistentFlags().BoolVarP(&debugFlag, "debug", "v", false, "enable debug logs")
 	rootCmd.PersistentFlags().IntVar(&cidrSuffixPerGoRoutine, "suffix", 4, "CIDR suffix per goroutine [each thread will scan 2^x IPs]")
