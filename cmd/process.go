@@ -65,12 +65,12 @@ var processCmd = &cobra.Command{
 
 		// we read job from the in-progress queue and only if that is empty, we read from todo queue
 		go func() {
-			s := <-signals
-			log.WithFields(logrus.Fields{"state": "main"}).Infof("received %v ... cancelling context.", s.String())
-			cancelFunc()
-			s = <-signals
-			log.WithFields(logrus.Fields{"state": "main"}).Fatalf("forcing exit due to %v", s.String())
-			os.Exit(-1)
+			for {
+				s := <-signals
+				log.WithFields(logrus.Fields{"state": "main"}).Infof("received %v ... cancelling context.", s.String())
+				cancelFunc()
+				log.WithFields(logrus.Fields{"state": "main"}).Infof("waiting for threads to finish ...")
+			}
 		}()
 
 		rdb := redis.NewClient(&redis.Options{
@@ -79,94 +79,97 @@ var processCmd = &cobra.Command{
 			DB:       0,  // use default DB
 		})
 
-		job, err := GetJobToBeDone(ctx, rdb)
-		if err != nil {
-			log.WithFields(logrus.Fields{"state": "process.config", "errmsg": err}).Fatalf("error getting job from redis")
-		}
-		exportTarget, err := NewElasticsearch(elasticsearchHost, elasticsearchUsername, elasticsearchPassword, job.ExportIndex)
-		if err != nil {
-			log.WithFields(logrus.Fields{"state": "process.config", "errmsg": err}).Fatalf("error configuting elasticsearch export target")
-		}
-
-		initialResultChan := make(chan *CertResult, workerThreadCount*32)
-		scanWg := &sync.WaitGroup{}
-		scanWg.Add(workerThreadCount)
-		processCidrRange := make(chan CidrRange, workerThreadCount*2)
-		log.WithFields(logrus.Fields{"state": "process", "job-id": job.JobId}).Debugf("starting tls scanning threads")
-		for i := 0; i < workerThreadCount; i++ {
-			go ScanCertificatesInCidr(ctx, processCidrRange, workerScannerPorts, initialResultChan, scanWg, ".*")
-		}
-		log.WithFields(logrus.Fields{"state": "process", "job-id": job.JobId}).Debugf("starting header grabbing threads")
-		serverHeaderWg := &sync.WaitGroup{}
-		headerEnrichedResultsChan := ServerHeaderEnrichment(ctx, initialResultChan, workerServerHeaderThreads, serverHeaderWg)
-		log.WithFields(logrus.Fields{"state": "process", "job-id": job.JobId}).Debugf("starting jarm fingerprinting")
-		jarmFingerprintWg := &sync.WaitGroup{}
-		enrichedResultChan := JARMFingerprintEnrichment(ctx, headerEnrichedResultsChan, workerJarmThreads, jarmFingerprintWg)
-		log.WithFields(logrus.Fields{"state": "process", "job-id": job.JobId}).Debugf("starting export thread")
-		resultWg := &sync.WaitGroup{}
-		resultWg.Add(1)
-		go exportTarget.Export(enrichedResultChan, resultWg)
-		log.WithFields(logrus.Fields{"state": "process", "job-id": job.JobId}).Info("started all processing threads")
-
-		hostname, _ := os.Hostname()
-		statsPrefix := fmt.Sprintf("sslsearch:workers:%s", hostname)
-		profilePrefix := fmt.Sprintf("runtime-profiles/%s", hostname)
-		go ProfileRuntime(ctx, rdb, profilePrefix)
-		go ExportStatsPeriodically(ctx, rdb, job, statsPrefix, time.Duration(consoleRefreshSeconds)*time.Second)
-		go PrintProgressToConsole(consoleRefreshSeconds)
-
-	WorkerLoop:
 		for {
-			log.WithFields(logrus.Fields{"state": "process", "type": "mgmt", "job-id": job.JobId}).Debugf("getting next task from queue")
-			select {
-			case <-ctx.Done():
-				log.WithFields(logrus.Fields{"state": "process", "type": "mgmt", "job-id": job.JobId}).Infof("context done. exiting worker loop")
-				close(processCidrRange)
-				break WorkerLoop
-			default:
-				break
-			}
-			data, err := rdb.LPop(ctx, job.TaskQueue).Bytes()
+			job, err := GetJobToBeDone(ctx, rdb)
 			if err != nil {
-				if errors.Is(err, redis.Nil) {
-					log.WithFields(logrus.Fields{"state": "process", "type": "mgmt", "job-id": job.JobId}).Infof("task queue empty. trying to move it to done")
-					jobString, _ := json.Marshal(job)
-					count, err := rdb.LRem(ctx, SSLSEARCH_JOBS_IN_PROGRESS, 0, jobString).Result()
-					if err != nil {
-						log.WithFields(logrus.Fields{"state": "process", "type": "mgmt", "job-id": job.JobId, "errmsg": err}).Errorf("error deleting task from in-progress queue")
-					} else if count == 1 {
-						err := rdb.LPush(ctx, SSLSEARCH_JOB_QUEUE_DONE, jobString).Err()
-						if err != nil {
-							log.WithFields(logrus.Fields{"state": "process", "type": "mgmt", "job-id": job.JobId, "errmsg": err}).Errorf("error adding task to done queue")
-						}
-						log.WithFields(logrus.Fields{"state": "process", "type": "mgmt", "job-id": job.JobId}).Infof("added job to done queue")
-					}
-					close(processCidrRange)
-					break WorkerLoop
-				}
-				log.WithFields(logrus.Fields{"state": "process", "errmsg": err, "type": "mgmt", "job-id": job.JobId}).Errorf("error popping task from queue")
-				time.Sleep(time.Minute)
+				log.WithFields(logrus.Fields{"state": "process.config", "errmsg": err}).Fatalf("error getting job from redis")
+				time.Sleep(time.Minute * 5)
 				continue
 			}
-			var cidrRange CidrRange
-			if err = json.Unmarshal(data, &cidrRange); err != nil {
-				log.WithFields(logrus.Fields{"state": "process", "errmsg": err, "type": "mgmt", "job-id": job.JobId}).Error("error parsing task")
+			exportTarget, err := NewElasticsearch(elasticsearchHost, elasticsearchUsername, elasticsearchPassword, job.ExportIndex)
+			if err != nil {
+				log.WithFields(logrus.Fields{"state": "process.config", "errmsg": err}).Fatalf("error configuring elasticsearch export target")
 			}
-			log.WithFields(logrus.Fields{"state": "process", "csp": cidrRange.CSP, "region": cidrRange.Region, "cidr": cidrRange.Cidr, "job-id": job.JobId}).Infof("processing task")
-			SplitCIDR(cidrRange, cidrSuffixPerGoRoutine, processCidrRange)
+			initialResultChan := make(chan *CertResult, workerThreadCount*32)
+			scanWg := &sync.WaitGroup{}
+			scanWg.Add(workerThreadCount)
+			processCidrRange := make(chan CidrRange, workerThreadCount*2)
+			log.WithFields(logrus.Fields{"state": "process", "job-id": job.JobId}).Debugf("starting tls scanning threads")
+			for i := 0; i < workerThreadCount; i++ {
+				go ScanCertificatesInCidr(ctx, processCidrRange, workerScannerPorts, initialResultChan, scanWg, ".*")
+			}
+			log.WithFields(logrus.Fields{"state": "process", "job-id": job.JobId}).Debugf("starting header grabbing threads")
+			serverHeaderWg := &sync.WaitGroup{}
+			headerEnrichedResultsChan := ServerHeaderEnrichment(ctx, initialResultChan, workerServerHeaderThreads, serverHeaderWg)
+			log.WithFields(logrus.Fields{"state": "process", "job-id": job.JobId}).Debugf("starting jarm fingerprinting")
+			jarmFingerprintWg := &sync.WaitGroup{}
+			enrichedResultChan := JARMFingerprintEnrichment(ctx, headerEnrichedResultsChan, workerJarmThreads, jarmFingerprintWg)
+			log.WithFields(logrus.Fields{"state": "process", "job-id": job.JobId}).Debugf("starting export thread")
+			resultWg := &sync.WaitGroup{}
+			resultWg.Add(1)
+			go exportTarget.Export(enrichedResultChan, resultWg)
+			log.WithFields(logrus.Fields{"state": "process", "job-id": job.JobId}).Info("started all processing threads")
+
+			hostname, _ := os.Hostname()
+			statsPrefix := fmt.Sprintf("sslsearch:workers:%s", hostname)
+			profilePrefix := fmt.Sprintf("runtime-profiles/%s", hostname)
+			go ProfileRuntime(ctx, rdb, profilePrefix)
+			go ExportStatsPeriodically(ctx, rdb, job, statsPrefix, time.Duration(consoleRefreshSeconds)*time.Second)
+			go PrintProgressToConsole(consoleRefreshSeconds)
+
+		WorkerLoop:
+			for {
+				log.WithFields(logrus.Fields{"state": "process", "type": "mgmt", "job-id": job.JobId}).Debugf("getting next task from queue")
+				select {
+				case <-ctx.Done():
+					log.WithFields(logrus.Fields{"state": "process", "type": "mgmt", "job-id": job.JobId}).Infof("context done. exiting worker loop")
+					close(processCidrRange)
+					break WorkerLoop
+				default:
+					break
+				}
+				data, err := rdb.LPop(ctx, job.TaskQueue).Bytes()
+				if err != nil {
+					if errors.Is(err, redis.Nil) {
+						log.WithFields(logrus.Fields{"state": "process", "type": "mgmt", "job-id": job.JobId}).Infof("task queue empty. trying to move it to done")
+						jobString, _ := json.Marshal(job)
+						count, err := rdb.LRem(ctx, SSLSEARCH_JOBS_IN_PROGRESS, 0, jobString).Result()
+						if err != nil {
+							log.WithFields(logrus.Fields{"state": "process", "type": "mgmt", "job-id": job.JobId, "errmsg": err}).Errorf("error deleting task from in-progress queue")
+						} else if count == 1 {
+							err := rdb.LPush(ctx, SSLSEARCH_JOB_QUEUE_DONE, jobString).Err()
+							if err != nil {
+								log.WithFields(logrus.Fields{"state": "process", "type": "mgmt", "job-id": job.JobId, "errmsg": err}).Errorf("error adding task to done queue")
+							}
+							log.WithFields(logrus.Fields{"state": "process", "type": "mgmt", "job-id": job.JobId}).Infof("added job to done queue")
+						}
+						close(processCidrRange)
+						break WorkerLoop
+					}
+					log.WithFields(logrus.Fields{"state": "process", "errmsg": err, "type": "mgmt", "job-id": job.JobId}).Errorf("error popping task from queue")
+					time.Sleep(time.Minute)
+					continue
+				}
+				var cidrRange CidrRange
+				if err = json.Unmarshal(data, &cidrRange); err != nil {
+					log.WithFields(logrus.Fields{"state": "process", "errmsg": err, "type": "mgmt", "job-id": job.JobId}).Error("error parsing task")
+				}
+				log.WithFields(logrus.Fields{"state": "process", "csp": cidrRange.CSP, "region": cidrRange.Region, "cidr": cidrRange.Cidr, "job-id": job.JobId}).Infof("processing task")
+				SplitCIDR(cidrRange, cidrSuffixPerGoRoutine, processCidrRange)
+			}
+			log.WithFields(logrus.Fields{"state": "process", "job-id": job.JobId}).Infof("waiting for scanner threads to finish!")
+			scanWg.Wait()
+			close(initialResultChan)
+			log.WithFields(logrus.Fields{"state": "process", "job-id": job.JobId}).Info("tls scanning finished")
+			serverHeaderWg.Wait()
+			close(headerEnrichedResultsChan)
+			log.WithFields(logrus.Fields{"state": "process", "job-id": job.JobId}).Info("server header grabbing finished")
+			jarmFingerprintWg.Wait()
+			close(enrichedResultChan)
+			log.WithFields(logrus.Fields{"state": "process", "job-id": job.JobId}).Info("jarm fingerprinting finished")
+			resultWg.Wait()
+			log.WithFields(logrus.Fields{"state": "process", "job-id": job.JobId}).Infof("result exporting finished")
 		}
-		log.WithFields(logrus.Fields{"state": "process", "job-id": job.JobId}).Infof("waiting for scanner threads to finish!")
-		scanWg.Wait()
-		close(initialResultChan)
-		log.WithFields(logrus.Fields{"state": "process", "job-id": job.JobId}).Info("tls scanning finished")
-		serverHeaderWg.Wait()
-		close(headerEnrichedResultsChan)
-		log.WithFields(logrus.Fields{"state": "process", "job-id": job.JobId}).Info("server header grabbing finished")
-		jarmFingerprintWg.Wait()
-		close(enrichedResultChan)
-		log.WithFields(logrus.Fields{"state": "process", "job-id": job.JobId}).Info("jarm fingerprinting finished")
-		resultWg.Wait()
-		log.WithFields(logrus.Fields{"state": "process", "job-id": job.JobId}).Infof("result exporting finished")
 	},
 }
 

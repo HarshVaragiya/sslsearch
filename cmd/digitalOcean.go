@@ -66,9 +66,8 @@ func (digitalOcean DigitalOcean) GetCidrRanges(ctx context.Context, cidrChan cha
 		default:
 			record, err := reader.Read()
 			if err != nil && err != io.EOF {
-				log.WithFields(logrus.Fields{"state": "DigitalOcean", "action": "get-cidr-range", "errmsg": err.Error()}).Fatal("error parsing response")
-				done = true
-				break
+				log.WithFields(logrus.Fields{"state": "DigitalOcean", "action": "get-cidr-range", "errmsg": err.Error()}).Errorf("error parsing response")
+				continue
 			} else if err == io.EOF {
 				done = true
 				break
