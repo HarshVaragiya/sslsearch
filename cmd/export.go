@@ -14,7 +14,7 @@ import (
 
 	"compress/gzip"
 
-	elasticsearch "github.com/elastic/go-elasticsearch/v8"
+	"github.com/elastic/go-elasticsearch/v8"
 	"github.com/elastic/go-elasticsearch/v8/esutil"
 	"github.com/gocql/gocql"
 	"github.com/sirupsen/logrus"
