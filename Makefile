@@ -4,9 +4,9 @@ commons:
 	go mod tidy
 
 linux:	commons
-	GOOS=linux CGO_ENABLED=0 go build -pgo=default.pgo -o bin/sslsearch_linux .
+	GOOS=linux CGO_ENABLED=0 go build -ldflags "-w -s" -pgo=default.pgo -o bin/sslsearch_linux .
 
 darwin: commons
-	GOOS=darwin CGO_ENABLED=0 go build -pgo=default.pgo -o bin/sslsearch_darwin .
+	GOOS=darwin CGO_ENABLED=0 go build -ldflags "-w -s" -pgo=default.pgo -o bin/sslsearch_darwin .
 
 all: linux darwin
