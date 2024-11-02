@@ -127,14 +127,23 @@ var addCmd = &cobra.Command{
 		}()
 
 		taskCounter := 0x00
+		jobCache := make([]interface{}, 800)
+		jobIndex := 0
 		for cidr := range subCidrs {
 			data, err := json.Marshal(cidr)
 			if err != nil {
 				log.Fatalf("error marshalling CidrRange to JSON. error = %v", err)
 			}
-			rdb.LPush(ctx, jobTaskQueue, data)
+			jobCache[jobIndex] = data
+			jobIndex++
+			if jobIndex >= 800 {
+				rdb.LPush(ctx, jobTaskQueue, jobCache...)
+				jobIndex = 0
+			}
 			taskCounter += 1
 		}
+		rdb.LPush(ctx, jobTaskQueue, jobCache[:jobIndex]...)
+
 		log.Printf("task queue: %s", jobTaskQueue)
 		listLength := rdb.LLen(ctx, jobTaskQueue).Val()
 		log.Printf("task queue size      : %d", listLength)

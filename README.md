@@ -42,13 +42,14 @@ go install github.com/HarshVaragiya/sslsearch@latest
 - [x] Export integrations for cassandra cluster
 - [x] Export integration for elasticsearch
 - [x] Grab all HTTPS server response headers
+- [x] Added profile guided optimization (PGO)
+- [x] Added background worker (job queueing) using redis
+- [x] Add k8s example deployments, horizontal pod auto-scaler YAML files
 - [ ] Export integration to NATS
-- [ ] Worker implementation using gocraft/work for background scanning on k8s
 - [ ] QOL - Split codebase into different packages like libexport, libscan for better code quality.
 - [ ] Certificate information like issuer, signature, chain etc to also be stored for analysis.
 - [ ] CI/CD Setup with binary package available for download.
-- [ ] Integration tests with test docker containers??. 
-
+- [ ] Integration tests with test docker containers??.
 
 ## References
 Ideated after following the following research projects : 
