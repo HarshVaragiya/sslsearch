@@ -56,7 +56,6 @@ func (digitalOcean DigitalOcean) GetCidrRanges(ctx context.Context, cidrChan cha
 	respBody := resp.Body()
 	reader := csv.NewReader(bytes.NewReader(respBody))
 	done := false
-	//fmt.Printf("DO response : %v", string(respBody))
 	for !done {
 		select {
 		case <-ctx.Done():
@@ -73,6 +72,10 @@ func (digitalOcean DigitalOcean) GetCidrRanges(ctx context.Context, cidrChan cha
 				break
 			}
 			cidr := record[0]
+			// skip IPv6 addresses
+			if strings.Contains(cidr, "::") {
+				continue
+			}
 			regionNameString := strings.Join(record[1:4], "_")
 			if regionRegex.MatchString(regionNameString) {
 				cidrChan <- CidrRange{Cidr: cidr, CSP: "DigitalOcean", Region: regionNameString}

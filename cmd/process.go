@@ -25,7 +25,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"os/signal"
 	"sync"
@@ -38,9 +37,7 @@ import (
 )
 
 var (
-	workerScannerPorts        = []string{"443"}
-	workerServerHeaderThreads = 48
-	workerJarmThreads         = 128
+	workerScannerPorts = []string{"443"}
 )
 
 // processCmd represents the process command
@@ -85,15 +82,15 @@ var processCmd = &cobra.Command{
 
 		job, err := GetJobToBeDone(ctx, rdb)
 		if err != nil && errors.Is(err, redis.Nil) {
-			log.WithFields(logrus.Fields{"state": "process.config"}).Printf("exiting silently")
+			log.WithFields(logrus.Fields{"state": "main"}).Printf("exiting silently")
 			os.Exit(0)
 		} else if err != nil {
-			log.WithFields(logrus.Fields{"state": "process.config", "errmsg": err}).Printf("error getting job from queue")
+			log.WithFields(logrus.Fields{"state": "main", "errmsg": err}).Printf("error getting job from queue")
 			os.Exit(-1)
 		}
 		exportTarget, err := NewElasticsearch(elasticsearchHost, elasticsearchUsername, elasticsearchPassword, job.ExportIndex)
 		if err != nil {
-			log.WithFields(logrus.Fields{"state": "process.config", "errmsg": err}).Fatalf("error configuring elasticsearch export target")
+			log.WithFields(logrus.Fields{"state": "main", "errmsg": err}).Fatalf("error configuring elasticsearch export target")
 		}
 		initialResultChan := make(chan *CertResult, threadCount*32)
 		scanWg := &sync.WaitGroup{}
@@ -105,10 +102,10 @@ var processCmd = &cobra.Command{
 		}
 		log.WithFields(logrus.Fields{"state": "process", "job-id": job.JobId}).Debugf("starting header grabbing threads")
 		serverHeaderWg := &sync.WaitGroup{}
-		headerEnrichedResultsChan := ServerHeaderEnrichment(ctx, initialResultChan, workerServerHeaderThreads, serverHeaderWg)
+		headerEnrichedResultsChan := ServerHeaderEnrichment(ctx, initialResultChan, serverHeaderThreadCount, serverHeaderWg)
 		log.WithFields(logrus.Fields{"state": "process", "job-id": job.JobId}).Debugf("starting jarm fingerprinting")
 		jarmFingerprintWg := &sync.WaitGroup{}
-		enrichedResultChan := JARMFingerprintEnrichment(ctx, headerEnrichedResultsChan, workerJarmThreads, jarmFingerprintWg)
+		enrichedResultChan := JARMFingerprintEnrichment(ctx, headerEnrichedResultsChan, jarmFingerprintThreadCount, jarmFingerprintWg)
 		log.WithFields(logrus.Fields{"state": "process", "job-id": job.JobId}).Debugf("starting export thread")
 		resultWg := &sync.WaitGroup{}
 		resultWg.Add(1)
@@ -116,10 +113,8 @@ var processCmd = &cobra.Command{
 		log.WithFields(logrus.Fields{"state": "process", "job-id": job.JobId}).Info("started all processing threads")
 
 		hostname, _ := os.Hostname()
-		statsPrefix := fmt.Sprintf("sslsearch:workers:%s", hostname)
-		profilePrefix := fmt.Sprintf("runtime-profiles/%s", hostname)
-		go ProfileRuntime(ctx, rdb, profilePrefix)
-		go ExportStatsPeriodically(ctx, rdb, job, statsPrefix, time.Duration(consoleRefreshSeconds)*time.Second)
+		go ProfileRuntime(ctx, rdb, hostname)
+		go ExportStatsPeriodically(ctx, rdb, job, hostname, time.Duration(consoleRefreshSeconds)*time.Second)
 		go PrintProgressToConsole(consoleRefreshSeconds)
 
 	WorkerLoop:
@@ -185,32 +180,32 @@ func GetJobToBeDone(ctx context.Context, rdb *redis.Client) (*Job, error) {
 	var job Job
 	jobsInProgress, err := rdb.LRange(ctx, SSLSEARCH_JOBS_IN_PROGRESS, 0, 1).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
-		log.WithFields(logrus.Fields{"state": "process.config", "errmsg": err}).Errorf("error getting elements from in-progress job queue")
+		log.WithFields(logrus.Fields{"state": "main", "errmsg": err}).Errorf("error getting elements from in-progress job queue")
 		return &job, err
 	}
 	if err == nil && len(jobsInProgress) >= 1 {
 		jobJson := jobsInProgress[0]
 		err := json.Unmarshal([]byte(jobJson), &job)
 		if err != nil {
-			log.WithFields(logrus.Fields{"state": "process.config", "errmsg": err}).Errorf("error unmarshalling job into JSON")
+			log.WithFields(logrus.Fields{"state": "main", "errmsg": err}).Errorf("error unmarshalling job into JSON")
 			return &job, err
 		}
-		log.WithFields(logrus.Fields{"state": "process.config"}).Infof("job found: %s", job.Name)
+		log.WithFields(logrus.Fields{"state": "main"}).Infof("job found: %s", job.Name)
 		return &job, nil
 	}
 	jobJson, err := rdb.RPopLPush(ctx, SSLSEARCH_JOB_QUEUE_TODO, SSLSEARCH_JOBS_IN_PROGRESS).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
-		log.WithFields(logrus.Fields{"state": "process.config", "errmsg": err}).Errorf("error getting elements from todo job queue")
+		log.WithFields(logrus.Fields{"state": "main", "errmsg": err}).Errorf("error getting elements from todo job queue")
 		return &job, err
 	}
 	if err == nil {
 		if err := json.Unmarshal([]byte(jobJson), &job); err != nil {
-			log.WithFields(logrus.Fields{"state": "process.config", "errmsg": err}).Errorf("error unmarshalling job into JSON")
+			log.WithFields(logrus.Fields{"state": "main", "errmsg": err}).Errorf("error unmarshalling job into JSON")
 			return &job, err
 		}
-		log.WithFields(logrus.Fields{"state": "process.config"}).Infof("job found: %s", job.Name)
+		log.WithFields(logrus.Fields{"state": "main"}).Infof("job found: %s", job.Name)
 		return &job, nil
 	}
-	log.WithFields(logrus.Fields{"state": "process.config"}).Infof("no jobs found in the queue to be done")
+	log.WithFields(logrus.Fields{"state": "main"}).Infof("no jobs found in the queue to be done")
 	return nil, redis.Nil
 }

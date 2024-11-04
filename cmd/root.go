@@ -163,10 +163,10 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&elasticsearchIndex, "export.elastic.index", "", "elasticsearch index where data will be stored (default: sslsearch-YYYY-MM-DD)")
 	//rootCmd.MarkFlagsRequiredTogether("export.elastic", "export.elastic.host", "export.elastic.username", "export.elastic.password")
 
-	//rootCmd.MarkFlagsMutuallyExclusive("export.disk", "export.elastic", "export.cassandra")
+	rootCmd.MarkFlagsMutuallyExclusive("export.disk", "export.elastic", "export.cassandra")
 
 	// Recon flags
-	rootCmd.PersistentFlags().IntVar(&serverHeaderThreadCount, "server-header-threads", 40, "number of threads to use for server header result enrichment")
+	rootCmd.PersistentFlags().IntVar(&serverHeaderThreadCount, "server-header-threads", 256, "number of threads to use for server header result enrichment")
 	rootCmd.PersistentFlags().IntVar(&jarmRetryCount, "jarm-retry-count", 3, "retry attempts for JARM fingerprint")
-	rootCmd.PersistentFlags().IntVar(&jarmFingerprintThreadCount, "jarm-threads", 40, "number of threads to use for JARM fingerprint enrichment (>200 might not be stable)")
+	rootCmd.PersistentFlags().IntVar(&jarmFingerprintThreadCount, "jarm-threads", 512, "number of threads to use for JARM fingerprint enrichment")
 }

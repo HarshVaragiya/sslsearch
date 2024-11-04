@@ -244,7 +244,7 @@ func headerEnrichmentThread(ctx context.Context, rawResultChan, enrichedResultCh
 		serverHeadersScanned.Add(1)
 		enrichedResultChan <- rawResult
 	}
-	log.WithFields(logrus.Fields{"state": "enrichment"}).Debug("server header enrichment thread exiting")
+	log.WithFields(logrus.Fields{"state": "enrichment"}).Info("server header enrichment thread exiting")
 }
 
 func jarmFingerprintEnrichmentThread(ctx context.Context, rawResultChan, enrichedResultChan chan *CertResult, wg *sync.WaitGroup) {
@@ -262,7 +262,7 @@ func jarmFingerprintEnrichmentThread(ctx context.Context, rawResultChan, enriche
 		jarmFingerprintsScanned.Add(1)
 		enrichedResultChan <- rawResult
 	}
-	log.WithFields(logrus.Fields{"state": "enrichment"}).Debug("JARM Fingerprint enrichment thread exiting")
+	log.WithFields(logrus.Fields{"state": "enrichment"}).Info("JARM Fingerprint enrichment thread exiting")
 }
 
 func GrabServerHeaderForRemote(remote string) (string, map[string]string, error) {
