@@ -123,7 +123,6 @@ var processCmd = &cobra.Command{
 			select {
 			case <-ctx.Done():
 				log.WithFields(logrus.Fields{"state": "process", "type": "mgmt", "job-id": job.JobId}).Infof("context done. exiting worker loop")
-				close(processCidrRange)
 				break WorkerLoop
 			default:
 				break
@@ -143,7 +142,6 @@ var processCmd = &cobra.Command{
 						}
 						log.WithFields(logrus.Fields{"state": "process", "type": "mgmt", "job-id": job.JobId}).Infof("added job to done queue")
 					}
-					close(processCidrRange)
 					break WorkerLoop
 				}
 				log.WithFields(logrus.Fields{"state": "process", "errmsg": err, "type": "mgmt", "job-id": job.JobId}).Errorf("error popping task from queue")
@@ -157,6 +155,8 @@ var processCmd = &cobra.Command{
 			log.WithFields(logrus.Fields{"state": "process", "csp": cidrRange.CSP, "region": cidrRange.Region, "cidr": cidrRange.Cidr, "job-id": job.JobId}).Infof("processing task")
 			SplitCIDR(cidrRange, cidrSuffixPerGoRoutine, processCidrRange)
 		}
+		log.WithFields(logrus.Fields{"state": "process", "job-id": job.JobId}).Infof("worker loop ended")
+		close(processCidrRange)
 		log.WithFields(logrus.Fields{"state": "process", "job-id": job.JobId}).Infof("waiting for scanner threads to finish!")
 		scanWg.Wait()
 		close(initialResultChan)
@@ -190,7 +190,7 @@ func GetJobToBeDone(ctx context.Context, rdb *redis.Client) (*Job, error) {
 			log.WithFields(logrus.Fields{"state": "main", "errmsg": err}).Errorf("error unmarshalling job into JSON")
 			return &job, err
 		}
-		log.WithFields(logrus.Fields{"state": "main"}).Infof("job found: %s", job.Name)
+		log.WithFields(logrus.Fields{"state": "main"}).Infof("in-progress job found: %s", job.Name)
 		return &job, nil
 	}
 	jobJson, err := rdb.RPopLPush(ctx, SSLSEARCH_JOB_QUEUE_TODO, SSLSEARCH_JOBS_IN_PROGRESS).Result()
@@ -203,7 +203,7 @@ func GetJobToBeDone(ctx context.Context, rdb *redis.Client) (*Job, error) {
 			log.WithFields(logrus.Fields{"state": "main", "errmsg": err}).Errorf("error unmarshalling job into JSON")
 			return &job, err
 		}
-		log.WithFields(logrus.Fields{"state": "main"}).Infof("job found: %s", job.Name)
+		log.WithFields(logrus.Fields{"state": "main"}).Infof("todo job found: %s", job.Name)
 		return &job, nil
 	}
 	log.WithFields(logrus.Fields{"state": "main"}).Infof("no jobs found in the queue to be done")

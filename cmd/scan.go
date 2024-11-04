@@ -17,39 +17,30 @@ import (
 func ScanCertificatesInCidr(ctx context.Context, cidrChan chan CidrRange, ports []string, resultChan chan *CertResult, wg *sync.WaitGroup, keywordRegexString string) {
 	defer wg.Done()
 	keywordRegex := regexp.MustCompile("(?i)" + keywordRegexString)
-	for {
-		select {
-		case <-ctx.Done():
-			log.WithFields(logrus.Fields{"state": "scan"}).Tracef("context done, skipping to exit")
-			return
-		case cidr, open := <-cidrChan:
-			if !open {
-				return
-			}
-			ip, ipNet, err := net.ParseCIDR(cidr.Cidr)
-			if err != nil {
-				log.WithFields(logrus.Fields{"state": "scan", "errmsg": err.Error(), "cidr": cidr}).Errorf("failed to parse CIDR")
-				continue
-			}
-			log.WithFields(logrus.Fields{"state": "scan", "cidr": cidr}).Debugf("starting scan for CIDR range")
-			for ip := ip.Mask(ipNet.Mask); ipNet.Contains(ip); incrementIP(ip) {
-				for _, port := range ports {
-					remote := getRemoteAddrString(ip.String(), port)
-					result, err := ScanRemote(ctx, ip, port, keywordRegex)
-					if err != nil {
-						log.WithFields(logrus.Fields{"state": "deepscan", "remote": remote, "errmsg": err.Error()}).Tracef("error")
-						continue
-					} else {
-						result.CSP = cidr.CSP
-						result.Region = cidr.Region
-						result.Meta = cidr.Meta
-						result.Timestamp = time.Now()
-						resultChan <- result
-					}
+	for cidr := range cidrChan {
+		ip, ipNet, err := net.ParseCIDR(cidr.Cidr)
+		if err != nil {
+			log.WithFields(logrus.Fields{"state": "scan", "errmsg": err.Error(), "cidr": cidr}).Errorf("failed to parse CIDR")
+			continue
+		}
+		log.WithFields(logrus.Fields{"state": "scan", "cidr": cidr}).Debugf("starting scan for CIDR range")
+		for ip := ip.Mask(ipNet.Mask); ipNet.Contains(ip); incrementIP(ip) {
+			for _, port := range ports {
+				remote := getRemoteAddrString(ip.String(), port)
+				result, err := ScanRemote(ctx, ip, port, keywordRegex)
+				if err != nil {
+					log.WithFields(logrus.Fields{"state": "deepscan", "remote": remote, "errmsg": err.Error()}).Tracef("error")
+					continue
+				} else {
+					result.CSP = cidr.CSP
+					result.Region = cidr.Region
+					result.Meta = cidr.Meta
+					result.Timestamp = time.Now()
+					resultChan <- result
 				}
 			}
-			cidrRangesScanned.Add(1)
 		}
+		cidrRangesScanned.Add(1)
 	}
 }
 

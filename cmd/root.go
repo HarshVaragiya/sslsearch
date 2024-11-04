@@ -166,7 +166,7 @@ func init() {
 	rootCmd.MarkFlagsMutuallyExclusive("export.disk", "export.elastic", "export.cassandra")
 
 	// Recon flags
-	rootCmd.PersistentFlags().IntVar(&serverHeaderThreadCount, "server-header-threads", 256, "number of threads to use for server header result enrichment")
+	rootCmd.PersistentFlags().IntVar(&serverHeaderThreadCount, "server-header-threads", 32, "number of threads to use for server header result enrichment")
 	rootCmd.PersistentFlags().IntVar(&jarmRetryCount, "jarm-retry-count", 3, "retry attempts for JARM fingerprint")
-	rootCmd.PersistentFlags().IntVar(&jarmFingerprintThreadCount, "jarm-threads", 512, "number of threads to use for JARM fingerprint enrichment")
+	rootCmd.PersistentFlags().IntVar(&jarmFingerprintThreadCount, "jarm-threads", 64, "number of threads to use for JARM fingerprint enrichment")
 }
