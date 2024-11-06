@@ -95,7 +95,7 @@ var processCmd = &cobra.Command{
 		initialResultChan := make(chan *CertResult, threadCount*32)
 		scanWg := &sync.WaitGroup{}
 		scanWg.Add(threadCount)
-		processCidrRange := make(chan CidrRange, threadCount*2)
+		processCidrRange := make(chan CidrRange, threadCount)
 		log.WithFields(logrus.Fields{"state": "process", "job-id": job.JobId}).Debugf("starting tls scanning threads")
 		for i := 0; i < threadCount; i++ {
 			go ScanCertificatesInCidr(ctx, processCidrRange, workerScannerPorts, initialResultChan, scanWg, ".*")
@@ -136,6 +136,8 @@ var processCmd = &cobra.Command{
 					if err != nil {
 						log.WithFields(logrus.Fields{"state": "process", "type": "mgmt", "job-id": job.JobId, "errmsg": err}).Errorf("error deleting task from in-progress queue")
 					} else if count == 1 {
+						job.JobDoneTime = time.Now()
+						jobString, _ := json.Marshal(job)
 						err := rdb.LPush(ctx, SSLSEARCH_JOB_QUEUE_DONE, jobString).Err()
 						if err != nil {
 							log.WithFields(logrus.Fields{"state": "process", "type": "mgmt", "job-id": job.JobId, "errmsg": err}).Errorf("error adding task to done queue")
