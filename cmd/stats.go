@@ -35,4 +35,6 @@ func ExportStatsToRedis(ctx context.Context, rdb *redis.Client, redisKeyPrefix s
 	rdb.Set(ctx, fmt.Sprintf("%s:jarm-fingerprints-scanned", redisKeyPrefix), jarmFingerprintsScanned.Load(), STATS_TTL)
 	rdb.Set(ctx, fmt.Sprintf("%s:results-exported", redisKeyPrefix), resultsExported.Load(), STATS_TTL)
 	rdb.Set(ctx, fmt.Sprintf("%s:results-processed", redisKeyPrefix), resultsProcessed.Load(), STATS_TTL)
+	rdb.Set(ctx, fmt.Sprintf("%s:active-jarm-threads", redisKeyPrefix), activeJarmThreads.Load(), STATS_TTL)
+	rdb.Set(ctx, fmt.Sprintf("%s:active-header-threads", redisKeyPrefix), activeHeaderThreads.Load(), STATS_TTL)
 }

@@ -92,7 +92,7 @@ var processCmd = &cobra.Command{
 		if err != nil {
 			log.WithFields(logrus.Fields{"state": "main", "errmsg": err}).Fatalf("error configuring elasticsearch export target")
 		}
-		initialResultChan := make(chan *CertResult, threadCount*32)
+		initialResultChan := make(chan *CertResult, threadCount)
 		scanWg := &sync.WaitGroup{}
 		scanWg.Add(threadCount)
 		processCidrRange := make(chan CidrRange, threadCount)
@@ -157,6 +157,7 @@ var processCmd = &cobra.Command{
 			log.WithFields(logrus.Fields{"state": "process", "csp": cidrRange.CSP, "region": cidrRange.Region, "cidr": cidrRange.Cidr, "job-id": job.JobId}).Infof("processing task")
 			SplitCIDR(cidrRange, cidrSuffixPerGoRoutine, processCidrRange)
 		}
+
 		log.WithFields(logrus.Fields{"state": "process", "job-id": job.JobId}).Infof("worker loop ended")
 		close(processCidrRange)
 		log.WithFields(logrus.Fields{"state": "process", "job-id": job.JobId}).Infof("waiting for scanner threads to finish!")

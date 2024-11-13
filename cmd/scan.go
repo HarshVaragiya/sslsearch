@@ -102,15 +102,13 @@ func Summarize(start, stop time.Time) {
 
 func PrintProgressToConsole(refreshInterval int) {
 	for {
-		targetsScannedSinceRefresh := ipScanRate.Load()
 		ipScanRate.Store(0)
-		scanRate := float64(targetsScannedSinceRefresh) / float64(refreshInterval)
-		fmt.Printf("Progress: CIDRs [ %v / %v ]  IPs Scanned: %v / %v | Findings: %v | Headers Grabbed: %v / %v | JARM: %v / %v |  Export: %v / %v  | Rate: %.2f  ips/sec         \n",
+		fmt.Printf("Progress: CIDRs [ %v / %v ]  IPs Scanned: %v / %v | Findings: %v | Headers Grabbed: %v / %v | JARM: %v / %v |  Export: %v / %v  | JT: %d | HT: %d         \n",
 			cidrRangesScanned.Load(), cidrRangesToScan.Load(),
 			ipsScanned.Load(), ipsToScan.Load(), totalFindings.Load(),
 			serverHeadersGrabbed.Load(), serverHeadersScanned.Load(),
 			jarmFingerprintsGrabbed.Load(), jarmFingerprintsScanned.Load(),
-			resultsExported.Load(), resultsProcessed.Load(), scanRate)
+			resultsExported.Load(), resultsProcessed.Load(), activeJarmThreads.Load(), activeHeaderThreads.Load())
 		time.Sleep(time.Second * time.Duration(int64(refreshInterval)))
 	}
 }
@@ -166,7 +164,7 @@ func ProgressBar(refreshInterval int) {
 }
 
 func ServerHeaderEnrichment(ctx context.Context, rawResultChan chan *CertResult, enrichmentThreads int, wg *sync.WaitGroup) chan *CertResult {
-	enrichedResultChan := make(chan *CertResult, enrichmentThreads*2000)
+	enrichedResultChan := make(chan *CertResult, enrichmentThreads*800)
 	wg.Add(enrichmentThreads)
 	for i := 0; i < enrichmentThreads; i++ {
 		go headerEnrichmentThread(ctx, rawResultChan, enrichedResultChan, wg)
@@ -175,7 +173,7 @@ func ServerHeaderEnrichment(ctx context.Context, rawResultChan chan *CertResult,
 }
 
 func JARMFingerprintEnrichment(ctx context.Context, rawResultChan chan *CertResult, enrichmentThreads int, wg *sync.WaitGroup) chan *CertResult {
-	enrichedResultChan := make(chan *CertResult, enrichmentThreads*2000)
+	enrichedResultChan := make(chan *CertResult, enrichmentThreads*400)
 	wg.Add(enrichmentThreads)
 	for i := 0; i < enrichmentThreads; i++ {
 		go jarmFingerprintEnrichmentThread(ctx, rawResultChan, enrichedResultChan, wg)

@@ -23,6 +23,7 @@ func ProfileRuntime(ctx context.Context, rdb *redis.Client, hostname string) {
 	})
 	if err != nil {
 		log.WithFields(logrus.Fields{"state": "profile", "type": "mgmt", "errmsg": err}).Errorf("error connecting to MinIO server")
+		return
 	}
 	for {
 		time.Sleep(time.Minute)

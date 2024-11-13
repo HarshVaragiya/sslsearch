@@ -82,7 +82,7 @@ func NewElasticsearch(elasticHost, elasticUser, elasticPass, elasticIndex string
 		Client:     client,       // The Elasticsearch client
 		Index:      elasticIndex, // The default index name
 		NumWorkers: 1,            // The number of worker goroutines (default: number of CPUs)
-		FlushBytes: 8e+6,         // The flush threshold in bytes 1M
+		FlushBytes: 2e+6,         // The flush threshold in bytes 1M
 	})
 	if err != nil {
 		log.WithFields(logrus.Fields{"state": "elastic", "errmsg": err}).Errorf("error creating elasticsearch bulk indexer")

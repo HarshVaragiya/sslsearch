@@ -230,7 +230,8 @@ func SplitCIDR(cidrString CidrRange, suffixLenPerGoRoutine int, cidrChan chan Ci
 
 func headerEnrichmentThread(ctx context.Context, rawResultChan, enrichedResultChan chan *CertResult, wg *sync.WaitGroup) {
 	defer wg.Done()
-	log.WithFields(logrus.Fields{"state": "enrichment"}).Debug("server header enrichment thread starting")
+	activeHeaderThreads.Add(1)
+	log.WithFields(logrus.Fields{"state": "enrichment"}).Info("server header enrichment thread starting")
 	for rawResult := range rawResultChan {
 		serverHeader, allHeaders, err := GrabServerHeaderForRemote(getRemoteAddrString(rawResult.Ip, rawResult.Port))
 		if err == nil {
@@ -244,12 +245,14 @@ func headerEnrichmentThread(ctx context.Context, rawResultChan, enrichedResultCh
 		serverHeadersScanned.Add(1)
 		enrichedResultChan <- rawResult
 	}
-	log.WithFields(logrus.Fields{"state": "enrichment"}).Debugf("server header enrichment thread exiting")
+	activeHeaderThreads.Add(-1)
+	log.WithFields(logrus.Fields{"state": "enrichment"}).Info("server header enrichment thread exiting")
 }
 
 func jarmFingerprintEnrichmentThread(ctx context.Context, rawResultChan, enrichedResultChan chan *CertResult, wg *sync.WaitGroup) {
 	defer wg.Done()
-	log.WithFields(logrus.Fields{"state": "enrichment"}).Debug("JARM Fingerprint enrichment thread exiting")
+	activeJarmThreads.Add(1)
+	log.WithFields(logrus.Fields{"state": "enrichment"}).Info("JARM Fingerprint enrichment thread starting")
 	for rawResult := range rawResultChan {
 		if jarmFingerprint, err := GetJARMFingerprint(getRemoteAddrString(rawResult.Ip, rawResult.Port)); err == nil {
 			rawResult.JARM = jarmFingerprint
@@ -262,7 +265,8 @@ func jarmFingerprintEnrichmentThread(ctx context.Context, rawResultChan, enriche
 		jarmFingerprintsScanned.Add(1)
 		enrichedResultChan <- rawResult
 	}
-	log.WithFields(logrus.Fields{"state": "enrichment"}).Debugf("JARM Fingerprint enrichment thread exiting")
+	activeJarmThreads.Add(-1)
+	log.WithFields(logrus.Fields{"state": "enrichment"}).Info("JARM Fingerprint enrichment thread exiting")
 }
 
 func GrabServerHeaderForRemote(remote string) (string, map[string]string, error) {
@@ -273,7 +277,7 @@ func GrabServerHeaderForRemote(remote string) (string, map[string]string, error)
 	defer fasthttp.ReleaseRequest(req)
 	defer fasthttp.ReleaseResponse(resp)
 	req.SetRequestURI(fmt.Sprintf("https://%s", remote))
-	err := client.Do(req, resp)
+	err := client.DoTimeout(req, resp, 10*time.Second)
 	allHeaders := make(map[string]string)
 	if err != nil {
 		return "", allHeaders, err

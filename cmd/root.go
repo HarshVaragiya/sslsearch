@@ -79,6 +79,8 @@ var (
 	serverHeadersScanned    = atomic.Int64{}
 	resultsExported         = atomic.Int64{}
 	resultsProcessed        = atomic.Int64{}
+	activeJarmThreads       = atomic.Int64{}
+	activeHeaderThreads     = atomic.Int64{}
 	jarmRetryCount          = 3
 	tcpTimeout              = 10
 	consoleRefreshSeconds   = 5
@@ -136,7 +138,7 @@ func init() {
 	viper.AutomaticEnv()
 	rootCmd.PersistentFlags().StringVarP(&keywordRegexString, "keyword-regex", "k", ".*", "case insensitive keyword regex to search in subject or SAN (ex: .*amazon.* or .* which matches all)")
 	rootCmd.PersistentFlags().StringVarP(&portsString, "ports", "p", "443", "ports to search")
-	rootCmd.PersistentFlags().IntVarP(&threadCount, "threads", "t", 4096, "number of parallel threads to use")
+	rootCmd.PersistentFlags().IntVarP(&threadCount, "threads", "t", 1024, "number of parallel threads to use")
 	rootCmd.PersistentFlags().IntVar(&consoleRefreshSeconds, "refresh", 5, "console progress refresh in seconds")
 	rootCmd.PersistentFlags().BoolVarP(&debugFlag, "debug", "v", false, "enable debug logs")
 	rootCmd.PersistentFlags().IntVar(&cidrSuffixPerGoRoutine, "suffix", 4, "CIDR suffix per goroutine [each thread will scan 2^x IPs]")
@@ -166,7 +168,7 @@ func init() {
 	rootCmd.MarkFlagsMutuallyExclusive("export.disk", "export.elastic", "export.cassandra")
 
 	// Recon flags
-	rootCmd.PersistentFlags().IntVar(&serverHeaderThreadCount, "server-header-threads", 32, "number of threads to use for server header result enrichment")
+	rootCmd.PersistentFlags().IntVar(&serverHeaderThreadCount, "server-header-threads", 16, "number of threads to use for server header result enrichment")
 	rootCmd.PersistentFlags().IntVar(&jarmRetryCount, "jarm-retry-count", 3, "retry attempts for JARM fingerprint")
 	rootCmd.PersistentFlags().IntVar(&jarmFingerprintThreadCount, "jarm-threads", 64, "number of threads to use for JARM fingerprint enrichment")
 }
