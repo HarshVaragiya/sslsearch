@@ -231,7 +231,7 @@ func SplitCIDR(cidrString CidrRange, suffixLenPerGoRoutine int, cidrChan chan Ci
 func headerEnrichmentThread(ctx context.Context, rawResultChan, enrichedResultChan chan *CertResult, wg *sync.WaitGroup) {
 	defer wg.Done()
 	activeHeaderThreads.Add(1)
-	log.WithFields(logrus.Fields{"state": "enrichment"}).Info("server header enrichment thread starting")
+	log.WithFields(logrus.Fields{"state": "enrichment"}).Debugf("server header enrichment thread starting")
 	for rawResult := range rawResultChan {
 		serverHeader, allHeaders, err := GrabServerHeaderForRemote(getRemoteAddrString(rawResult.Ip, rawResult.Port))
 		if err == nil {
@@ -246,13 +246,13 @@ func headerEnrichmentThread(ctx context.Context, rawResultChan, enrichedResultCh
 		enrichedResultChan <- rawResult
 	}
 	activeHeaderThreads.Add(-1)
-	log.WithFields(logrus.Fields{"state": "enrichment"}).Info("server header enrichment thread exiting")
+	log.WithFields(logrus.Fields{"state": "enrichment"}).Debugf("server header enrichment thread exiting")
 }
 
 func jarmFingerprintEnrichmentThread(ctx context.Context, rawResultChan, enrichedResultChan chan *CertResult, wg *sync.WaitGroup) {
 	defer wg.Done()
 	activeJarmThreads.Add(1)
-	log.WithFields(logrus.Fields{"state": "enrichment"}).Info("JARM Fingerprint enrichment thread starting")
+	log.WithFields(logrus.Fields{"state": "enrichment"}).Debugf("JARM Fingerprint enrichment thread starting")
 	for rawResult := range rawResultChan {
 		if jarmFingerprint, err := GetJARMFingerprint(getRemoteAddrString(rawResult.Ip, rawResult.Port)); err == nil {
 			rawResult.JARM = jarmFingerprint
@@ -266,7 +266,7 @@ func jarmFingerprintEnrichmentThread(ctx context.Context, rawResultChan, enriche
 		enrichedResultChan <- rawResult
 	}
 	activeJarmThreads.Add(-1)
-	log.WithFields(logrus.Fields{"state": "enrichment"}).Info("JARM Fingerprint enrichment thread exiting")
+	log.WithFields(logrus.Fields{"state": "enrichment"}).Debugf("JARM Fingerprint enrichment thread exiting")
 }
 
 func GrabServerHeaderForRemote(remote string) (string, map[string]string, error) {

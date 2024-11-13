@@ -17,12 +17,13 @@ func ProfileRuntime(ctx context.Context, rdb *redis.Client, hostname string) {
 	endpoint := os.Getenv("MINIO_ENDPOINT")
 	accessKey := os.Getenv("ACCESS_KEY")
 	secretKey := os.Getenv("SECRET_KEY")
+	bucketName := os.Getenv("BUCKET_NAME")
 	minioClient, err := minio.New(endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
 		Secure: false,
 	})
-	if err != nil {
-		log.WithFields(logrus.Fields{"state": "profile", "type": "mgmt", "errmsg": err}).Errorf("error connecting to MinIO server")
+	if err != nil || bucketName == "" {
+		log.WithFields(logrus.Fields{"state": "profile", "type": "mgmt", "errmsg": err}).Errorf("error connecting to MinIO server. exiting profiling")
 		return
 	}
 	for {
@@ -33,27 +34,47 @@ func ProfileRuntime(ctx context.Context, rdb *redis.Client, hostname string) {
 			continue
 		}
 		log.WithFields(logrus.Fields{"state": "profile", "type": "mgmt"}).Infof("attempting to profile application. prefix: %s", keyPrefix)
-		tmpFileName := "/tmp/" + uuid.NewString() + ".prof"
-		tmpFile, err := os.Create(tmpFileName)
+		cpuProfileTmpFileName := "/tmp/cpu-" + uuid.NewString() + ".prof"
+		heapProfileTmpFileName := "/tmp/heap-" + uuid.NewString() + ".prof"
+		cpuProfileFile, err := os.Create(cpuProfileTmpFileName)
 		if err != nil {
-			log.WithFields(logrus.Fields{"state": "profile", "type": "mgmt", "errmsg": err}).Errorf("error creating tmp file for profiling")
+			log.WithFields(logrus.Fields{"state": "profile", "type": "mgmt", "errmsg": err}).Errorf("error creating tmp file for CPU profiling")
 			continue
 		}
-		err = pprof.StartCPUProfile(tmpFile)
+		heapProfileFile, err := os.Create(heapProfileTmpFileName)
 		if err != nil {
-			log.WithFields(logrus.Fields{"state": "profile", "type": "mgmt", "errmsg": err}).Errorf("error starting profiling")
+			log.WithFields(logrus.Fields{"state": "profile", "type": "mgmt", "errmsg": err}).Errorf("error creating tmp file for HEAP profiling")
+			continue
+		}
+		err = pprof.StartCPUProfile(cpuProfileFile)
+		if err != nil {
+			log.WithFields(logrus.Fields{"state": "profile", "type": "mgmt", "errmsg": err}).Errorf("error starting CPU profiling")
+			continue
+		}
+		err = pprof.WriteHeapProfile(heapProfileFile)
+		if err != nil {
+			log.WithFields(logrus.Fields{"state": "profile", "type": "mgmt", "errmsg": err}).Errorf("error generating HEAP profile")
 			continue
 		}
 		time.Sleep(time.Minute)
 		pprof.StopCPUProfile()
-		tmpFile.Close()
-		objectName := fmt.Sprintf("%s/%s-%s.prof", keyPrefix, time.Now().Format("2006-01-02-15-04-05"), hostname)
-		info, err := minioClient.FPutObject(ctx, "projects-sslsearch", objectName, tmpFileName, minio.PutObjectOptions{ContentType: "application/octet-stream"})
+		cpuProfileFile.Close()
+		heapProfileFile.Close()
+		cpuObjectName := fmt.Sprintf("%s/cpu/%s-%s.prof", keyPrefix, time.Now().Format("2006-01-02-15-04-05"), hostname)
+		heapObjectName := fmt.Sprintf("%s/heap/%s-%s.prof", keyPrefix, time.Now().Format("2006-01-02-15-04-05"), hostname)
+		info, err := minioClient.FPutObject(ctx, bucketName, cpuObjectName, cpuProfileTmpFileName, minio.PutObjectOptions{ContentType: "application/octet-stream"})
 		if err != nil {
 			log.WithFields(logrus.Fields{"state": "profile", "type": "mgmt", "errmsg": err}).Errorf("error uploading profile to minio server")
 			continue
 		}
-		log.WithFields(logrus.Fields{"state": "profile", "type": "mgmt"}).Infof("uploaded profile '%s' of size %d bytes", info.Key, info.Size)
-		os.Remove(tmpFileName)
+		log.WithFields(logrus.Fields{"state": "profile", "type": "mgmt"}).Infof("uploaded CPU profile '%s' of size %d bytes", info.Key, info.Size)
+		info, err = minioClient.FPutObject(ctx, bucketName, heapObjectName, heapProfileTmpFileName, minio.PutObjectOptions{ContentType: "application/octet-stream"})
+		if err != nil {
+			log.WithFields(logrus.Fields{"state": "profile", "type": "mgmt", "errmsg": err}).Errorf("error uploading profile to minio server")
+			continue
+		}
+		log.WithFields(logrus.Fields{"state": "profile", "type": "mgmt"}).Infof("uploaded HEAP profile '%s' of size %d bytes", info.Key, info.Size)
+		os.Remove(cpuProfileTmpFileName)
+		os.Remove(heapProfileTmpFileName)
 	}
 }
