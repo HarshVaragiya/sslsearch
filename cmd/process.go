@@ -181,34 +181,37 @@ func init() {
 
 func GetJobToBeDone(ctx context.Context, rdb *redis.Client) (*Job, error) {
 	var job Job
-	jobsInProgress, err := rdb.LRange(ctx, SSLSEARCH_JOBS_IN_PROGRESS, 0, 1).Result()
-	if err != nil && !errors.Is(err, redis.Nil) {
-		log.WithFields(logrus.Fields{"state": "main", "errmsg": err}).Errorf("error getting elements from in-progress job queue")
-		return &job, err
-	}
-	if err == nil && len(jobsInProgress) >= 1 {
-		jobJson := jobsInProgress[0]
-		err := json.Unmarshal([]byte(jobJson), &job)
-		if err != nil {
-			log.WithFields(logrus.Fields{"state": "main", "errmsg": err}).Errorf("error unmarshalling job into JSON")
-			return &job, err
+	err := rdb.Watch(ctx, func(tx *redis.Tx) error {
+		jobsInProgress, err := tx.LRange(ctx, SSLSEARCH_JOBS_IN_PROGRESS, 0, 1).Result()
+		if err != nil && !errors.Is(err, redis.Nil) {
+			log.WithFields(logrus.Fields{"state": "main", "errmsg": err}).Errorf("error getting elements from in-progress job queue")
+			return err
 		}
-		log.WithFields(logrus.Fields{"state": "main"}).Infof("in-progress job found: %s", job.Name)
-		return &job, nil
-	}
-	jobJson, err := rdb.RPopLPush(ctx, SSLSEARCH_JOB_QUEUE_TODO, SSLSEARCH_JOBS_IN_PROGRESS).Result()
-	if err != nil && !errors.Is(err, redis.Nil) {
-		log.WithFields(logrus.Fields{"state": "main", "errmsg": err}).Errorf("error getting elements from todo job queue")
-		return &job, err
-	}
-	if err == nil {
-		if err := json.Unmarshal([]byte(jobJson), &job); err != nil {
-			log.WithFields(logrus.Fields{"state": "main", "errmsg": err}).Errorf("error unmarshalling job into JSON")
-			return &job, err
+		if err == nil && len(jobsInProgress) >= 1 {
+			jobJson := jobsInProgress[0]
+			err := json.Unmarshal([]byte(jobJson), &job)
+			if err != nil {
+				log.WithFields(logrus.Fields{"state": "main", "errmsg": err}).Errorf("error unmarshalling job into JSON")
+				return err
+			}
+			log.WithFields(logrus.Fields{"state": "main"}).Infof("in-progress job found: %s", job.Name)
+			return nil
 		}
-		log.WithFields(logrus.Fields{"state": "main"}).Infof("todo job found: %s", job.Name)
-		return &job, nil
-	}
-	log.WithFields(logrus.Fields{"state": "main"}).Infof("no jobs found in the queue to be done")
-	return nil, redis.Nil
+		jobJson, err := tx.RPopLPush(ctx, SSLSEARCH_JOB_QUEUE_TODO, SSLSEARCH_JOBS_IN_PROGRESS).Result()
+		if err != nil && !errors.Is(err, redis.Nil) {
+			log.WithFields(logrus.Fields{"state": "main", "errmsg": err}).Errorf("error getting elements from todo job queue")
+			return err
+		}
+		if err == nil {
+			if err := json.Unmarshal([]byte(jobJson), &job); err != nil {
+				log.WithFields(logrus.Fields{"state": "main", "errmsg": err}).Errorf("error unmarshalling job into JSON")
+				return err
+			}
+			log.WithFields(logrus.Fields{"state": "main"}).Infof("todo job found: %s", job.Name)
+			return nil
+		}
+		log.WithFields(logrus.Fields{"state": "main"}).Infof("no jobs found in the queue to be done")
+		return redis.Nil
+	}, SSLSEARCH_JOBS_IN_PROGRESS, SSLSEARCH_JOB_QUEUE_TODO)
+	return &job, err
 }
