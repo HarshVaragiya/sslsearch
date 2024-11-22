@@ -233,7 +233,7 @@ func headerEnrichmentThread(ctx context.Context, rawResultChan, enrichedResultCh
 	activeHeaderThreads.Add(1)
 	log.WithFields(logrus.Fields{"state": "enrichment"}).Debugf("server header enrichment thread starting")
 	for rawResult := range rawResultChan {
-		serverHeader, allHeaders, err := GrabServerHeaderForRemote(getRemoteAddrString(rawResult.Ip, rawResult.Port))
+		serverHeader, allHeaders, err := GrabServerHeaderForRemote(ctx, getRemoteAddrString(rawResult.Ip, rawResult.Port))
 		if err == nil {
 			serverHeadersGrabbed.Add(1)
 		}
@@ -269,13 +269,16 @@ func jarmFingerprintEnrichmentThread(ctx context.Context, rawResultChan, enriche
 	log.WithFields(logrus.Fields{"state": "enrichment"}).Debugf("JARM Fingerprint enrichment thread exiting")
 }
 
-func GrabServerHeaderForRemote(remote string) (string, map[string]string, error) {
+func GrabServerHeaderForRemote(ctx context.Context, remote string) (string, map[string]string, error) {
 	client := httpClientPool.Get().(*fasthttp.Client)
 	defer httpClientPool.Put(client)
 	req := fasthttp.AcquireRequest()
 	resp := fasthttp.AcquireResponse()
 	defer fasthttp.ReleaseRequest(req)
 	defer fasthttp.ReleaseResponse(resp)
+	client.ReadTimeout = time.Second * 15
+	client.MaxConnDuration = time.Second * 15
+	client.MaxIdleConnDuration = time.Second * 15
 	req.SetRequestURI(fmt.Sprintf("https://%s", remote))
 	err := client.DoTimeout(req, resp, 10*time.Second)
 	allHeaders := make(map[string]string)
