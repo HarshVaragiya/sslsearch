@@ -20,10 +20,6 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func intPtr(i int) *int {
-	return &i
-}
-
 func GetExportTarget() ExportTarget {
 	if diskExport {
 		tg, err := NewDiskTarget(diskFilePath)
@@ -209,10 +205,10 @@ func (ca *Cassandra) Export(resultChan chan *CertResult, resultWg *sync.WaitGrou
 	return nil
 }
 
-func insertRecordIntoCassandra(session *gocql.Session, tableName string, record_ts string, result *CertResult) error {
-	query := session.Query(
-		fmt.Sprintf("INSERT INTO %s (record_ts, csp, region, ip, port, subject, scan_ts, issuer, sans, server_header, jarm, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", tableName),
-		record_ts, result.CSP, result.Region, result.Ip, result.Port, result.Subject, result.Timestamp, result.Issuer, result.SANs, result.Server, result.JARM, result.Meta,
+func insertRecordIntoCassandra(session *gocql.Session, tableName string, cassandraRecordTimeStampKey string, result *CertResult) error {
+	queryString := fmt.Sprintf("INSERT INTO %s (record_ts, ip, port, subject, issuer, sans, jarm, csp, region, meta, timestamp, headers, server, host) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", tableName)
+	query := session.Query(queryString,
+		cassandraRecordTimeStampKey, result.Ip, result.Port, result.Subject, result.Issuer, result.SANs, result.JARM, result.CSP, result.Region, result.Meta, result.Timestamp, result.Headers, result.Server, result.Host,
 	)
 	if err := query.Exec(); err != nil {
 		return fmt.Errorf("failed to execute query: %v", err)
