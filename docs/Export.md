@@ -1,8 +1,20 @@
 # Disk
 
+
 # Elasticsearch
 
+
+
 # Cassandra / ScyllaDB
+
+- Create `recon` keyspace (you can skip if you have any other existing keyspace)
+
+```cqlsh
+create keyspace recon with replication = {'class': 'SimpleStrategy', 'replication_factor': 1};
+```
+
+- create the `sslsearch` table in the selected keyspace.
+
 ```cqlsh
 CREATE TABLE IF NOT EXISTS sslsearch  (
     record_ts TEXT,
