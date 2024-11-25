@@ -8,7 +8,9 @@
   
   - install as a CLI tool for quick one-off scans
   ```bash
-  go install github.com/HarshVaragiya/sslsearch@latest
+  git clone https://github.com/HarshVaragiya/sslsearch.git
+  cd sslsearch
+  go install
   ```
   
   - run as a docker container
