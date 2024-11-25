@@ -1,11 +1,9 @@
-FROM golang:buster as builder
+FROM golang:alpine AS builder
 WORKDIR /app
 COPY . /app/
-ENV CGO_ENABLED 0
-ENV GOOS linux
-RUN make build
+RUN apk add make && make linux
 
 FROM alpine
 WORKDIR /app
-COPY --from=builder /app/bin/sslsearch /app/sslsearch
+COPY --from=builder /app/bin/sslsearch_linux /app/sslsearch
 ENTRYPOINT ["/app/sslsearch"]

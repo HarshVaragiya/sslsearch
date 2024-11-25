@@ -21,7 +21,9 @@ THE SOFTWARE.
 */
 package main
 
-import "github.com/HarshVaragiya/sslsearch/cmd"
+import (
+	"github.com/HarshVaragiya/sslsearch/cmd"
+)
 
 func main() {
 	cmd.Execute()

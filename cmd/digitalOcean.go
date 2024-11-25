@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/csv"
-	"fmt"
 	"io"
 	"regexp"
 	"strings"
@@ -32,22 +31,12 @@ var digitalOceanCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(digitalOceanCmd)
 	digitalOceanCmd.Flags().StringVarP(&regionRegexString, "region-regex", "r", ".*", "regex of cloud service provider region to search")
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// digitalOceanCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// digitalOceanCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
 
 type DigitalOcean struct {
 }
 
-func (digitalOcean DigitalOcean) GetCidrRanges(ctx context.Context, cidrChan chan string, region string) {
+func (digitalOcean DigitalOcean) GetCidrRanges(ctx context.Context, cidrChan chan CidrRange, region string) {
 	defer close(cidrChan)
 
 	req := fasthttp.AcquireRequest()
@@ -67,7 +56,6 @@ func (digitalOcean DigitalOcean) GetCidrRanges(ctx context.Context, cidrChan cha
 	respBody := resp.Body()
 	reader := csv.NewReader(bytes.NewReader(respBody))
 	done := false
-	fmt.Printf("DO response : %v", string(respBody))
 	for !done {
 		select {
 		case <-ctx.Done():
@@ -77,17 +65,20 @@ func (digitalOcean DigitalOcean) GetCidrRanges(ctx context.Context, cidrChan cha
 		default:
 			record, err := reader.Read()
 			if err != nil && err != io.EOF {
-				log.WithFields(logrus.Fields{"state": "DigitalOcean", "action": "get-cidr-range", "errmsg": err.Error()}).Fatal("error parsing response")
-				done = true
-				break
+				log.WithFields(logrus.Fields{"state": "DigitalOcean", "action": "get-cidr-range", "errmsg": err.Error()}).Errorf("error parsing response")
+				continue
 			} else if err == io.EOF {
 				done = true
 				break
 			}
 			cidr := record[0]
+			// skip IPv6 addresses
+			if strings.Contains(cidr, "::") {
+				continue
+			}
 			regionNameString := strings.Join(record[1:4], "_")
 			if regionRegex.MatchString(regionNameString) {
-				cidrChan <- cidr
+				cidrChan <- CidrRange{Cidr: cidr, CSP: "DigitalOcean", Region: regionNameString}
 				log.WithFields(logrus.Fields{"state": "DigitalOcean", "action": "get-cidr-range"}).Debugf("added %v to scan target for region %v", cidr, regionNameString)
 			} else {
 				log.WithFields(logrus.Fields{"state": "DigitalOcean", "action": "get-cidr-range"}).Debugf("skipped %v from region %v", cidr, regionNameString)

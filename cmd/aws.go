@@ -30,16 +30,6 @@ var awsCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(awsCmd)
 	awsCmd.Flags().StringVarP(&regionRegexString, "region-regex", "r", ".*", "regex of cloud service provider region to search")
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// awsCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// awsCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
 
 type AWS struct {
@@ -58,7 +48,7 @@ type AwsPrefix struct {
 	// NetworkBorderGroup string `json:"network_border_group"` IGNORED
 }
 
-func (aws AWS) GetCidrRanges(ctx context.Context, cidrChan chan string, region string) {
+func (aws AWS) GetCidrRanges(ctx context.Context, cidrChan chan CidrRange, region string) {
 	var ipRangesResponse AwsIPRangeResponse
 
 	defer close(cidrChan)
@@ -93,7 +83,7 @@ func (aws AWS) GetCidrRanges(ctx context.Context, cidrChan chan string, region s
 				return
 			default:
 				if regionRegex.MatchString(prefix.Region) {
-					cidrChan <- prefix.IPPrefix
+					cidrChan <- CidrRange{Cidr: prefix.IPPrefix, CSP: "AWS", Region: prefix.Region, Meta: prefix.Service}
 					log.WithFields(logrus.Fields{"state": "AWS", "action": "get-cidr-range"}).Debugf("added %v to scan target for region %v", prefix.IPPrefix, prefix.Region)
 				} else {
 					log.WithFields(logrus.Fields{"state": "AWS", "action": "get-cidr-range"}).Debugf("skipped %v from region %v", prefix.IPPrefix, prefix.Region)

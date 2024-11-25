@@ -7,6 +7,9 @@ Details - https://medium.com/@harsh8v/ssl-search-a-tool-to-identify-infrastructu
 
 
 ### Installation
+
+- Currently the only way to use this tool is to build the binary using golang. 
+
 ```bash
 go install github.com/HarshVaragiya/sslsearch@latest
 ```
@@ -24,7 +27,7 @@ go install github.com/HarshVaragiya/sslsearch@latest
 | Digital Ocean               | NL_NL-NH_Amsterdam    | ✅   | ✅            |
 | Google Cloud Platform       | us-west4              | ✅   | ✅            |
 | Oracle Cloud Infrastructure | ca-montreal-1         | ✅   | ✅            |
-| Raw CIDR / IP Range         | -                     | ✅   | ✅            |                            |                       |      |               |
+| Raw CIDR / IP Range         | -                     | ✅   | ✅            |
 
 
 ## Potential uses 
@@ -35,6 +38,18 @@ go install github.com/HarshVaragiya/sslsearch@latest
 5. Finding Mail / RDP / Other services belonging to a target that use x509 certificates to secure connections. 
 
 
+## Future plans (not a roadmap)
+- [x] Export integrations for cassandra cluster
+- [x] Export integration for elasticsearch
+- [x] Grab all HTTPS server response headers
+- [x] Added profile guided optimization (PGO)
+- [x] Added background worker (job queueing) using redis
+- [x] Add k8s example deployments, horizontal pod auto-scaler YAML files
+- [ ] Export integration to NATS
+- [ ] QOL - Split codebase into different packages like libexport, libscan for better code quality.
+- [ ] Certificate information like issuer, signature, chain etc to also be stored for analysis.
+- [ ] CI/CD Setup with binary package available for download.
+- [ ] Integration tests with test docker containers??.
 
 ## References
 Ideated after following the following research projects : 

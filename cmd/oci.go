@@ -30,16 +30,6 @@ var ociCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(ociCmd)
 	ociCmd.Flags().StringVarP(&regionRegexString, "region-regex", "r", ".*", "regex of cloud service provider region to search")
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// ociCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// ociCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
 
 type Oracle struct {
@@ -57,7 +47,7 @@ type OracleIPRangeResponse struct {
 	RegionsElements []*RegionsElement `json:"regions"`
 }
 
-func (oracle Oracle) GetCidrRanges(ctx context.Context, cidrChan chan string, region string) {
+func (oracle Oracle) GetCidrRanges(ctx context.Context, cidrChan chan CidrRange, region string) {
 	var ipRangesResponse OracleIPRangeResponse
 
 	defer close(cidrChan)
@@ -93,7 +83,7 @@ func (oracle Oracle) GetCidrRanges(ctx context.Context, cidrChan chan string, re
 						log.WithFields(logrus.Fields{"state": "OCI", "action": "get-cidr-range"}).Info("recieved context cancellation")
 						return
 					default:
-						cidrChan <- cidr.Cidr
+						cidrChan <- CidrRange{Cidr: cidr.Cidr, CSP: "OCI", Region: regionElement.Region}
 						log.WithFields(logrus.Fields{"state": "OCI", "action": "get-cidr-range"}).Debugf("added %v to scan target", cidr.Cidr)
 					}
 				}

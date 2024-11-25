@@ -21,11 +21,12 @@ var cidrCmd = &cobra.Command{
 			log.WithFields(logrus.Fields{"state": "main"}).Fatalf("error parsing input args as CIDR. args: %v", args)
 		}
 
-		cidrChan := make(chan string, threadCount*5)
+		cidrChan := make(chan CidrRange, threadCount*5)
 		// generate input ips
 		go func() {
 			defer close(cidrChan)
-			err := SplitCIDR(args[0], cidrSuffixPerGoRoutine, cidrChan)
+			cidr := CidrRange{Cidr: args[0], CSP: "NA", Region: "NA"}
+			err := SplitCIDR(cidr, cidrSuffixPerGoRoutine, cidrChan)
 			if err != nil {
 				log.WithFields(logrus.Fields{"state": "main", "action": "divide-cidr", "errmsg": err.Error(), "cidr": args[0]}).Fatal("error generating sub-CIDR ranges")
 			}
@@ -38,14 +39,4 @@ var cidrCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(cidrCmd)
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// cidrCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// cidrCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }

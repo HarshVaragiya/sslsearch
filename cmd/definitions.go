@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"context"
+	"sync"
+	"time"
 )
 
 const (
@@ -15,14 +17,32 @@ const (
 )
 
 type CidrRangeInput interface {
-	GetCidrRanges(context.Context, chan string, string)
+	GetCidrRanges(context.Context, chan CidrRange, string)
+}
+
+type ExportTarget interface {
+	Export(resultChan chan *CertResult, resultWg *sync.WaitGroup) error
+}
+
+type CidrRange struct {
+	Cidr   string `json:"cidr"`
+	CSP    string `json:"csp"`
+	Region string `json:"region"`
+	Meta   string `json:"meta"`
 }
 
 type CertResult struct {
-	RemoteAddr   string   `json:"remote"`
-	Subject      string   `json:"subject"`
-	Issuer       string   `json:"issuer"`
-	SANs         []string `json:"SANs"`
-	ServerHeader string   `json:"server"`
-	JARM         string   `json:"jarm"`
+	Ip        string            `json:"ip"`
+	Port      string            `json:"port"`
+	Subject   string            `json:"subject"`
+	Issuer    string            `json:"issuer"`
+	SANs      []string          `json:"SANs"`
+	JARM      string            `json:"jarm"`
+	CSP       string            `json:"cloud"`
+	Region    string            `json:"region"`
+	Meta      string            `json:"metadata"`
+	Timestamp time.Time         `json:"timestamp"`
+	Headers   map[string]string `json:"headers"`
+	Server    string            `json:"server"`
+	Host      string            `json:"host"`
 }

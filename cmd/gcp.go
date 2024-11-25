@@ -30,16 +30,6 @@ var gcpCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(gcpCmd)
 	gcpCmd.Flags().StringVarP(&regionRegexString, "region-regex", "r", ".*", "regex of cloud service provider region to search")
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// gcpCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// gcpCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
 
 type GCP struct {
@@ -48,8 +38,8 @@ type GCP struct {
 type GcpPrefix struct {
 	Ipv4Prefix string `json:"ipv4Prefix"` // IPv4 Cidr that usually appears
 	Ipv6Prefix string `json:"ipv6Prefix"` // Ipv6 Cidr that appears sometimes
-	// Service    string `json:"service"` # always remains "Google Cloud" hence skipped
-	Scope string `json:"scope"` // Region Key
+	Service    string `json:"service"`    // mostly remains "Google Cloud" ??
+	Scope      string `json:"scope"`      // Region Key
 }
 
 type GcpIPRangeResponse struct {
@@ -58,7 +48,7 @@ type GcpIPRangeResponse struct {
 	Prefixes     []*GcpPrefix `json:"prefixes"`
 }
 
-func (gcp GCP) GetCidrRanges(ctx context.Context, cidrChan chan string, region string) {
+func (gcp GCP) GetCidrRanges(ctx context.Context, cidrChan chan CidrRange, region string) {
 	var ipRangesResponse GcpIPRangeResponse
 
 	defer close(cidrChan)
@@ -96,7 +86,7 @@ func (gcp GCP) GetCidrRanges(ctx context.Context, cidrChan chan string, region s
 					if prefix.Ipv6Prefix != "" {
 						continue
 					}
-					cidrChan <- prefix.Ipv4Prefix
+					cidrChan <- CidrRange{Cidr: prefix.Ipv4Prefix, CSP: "GCP", Region: prefix.Scope, Meta: prefix.Service}
 					log.WithFields(logrus.Fields{"state": "GCP", "action": "get-cidr-range"}).Debugf("added %v to scan target for region %v", prefix.Ipv4Prefix, prefix.Scope)
 				} else {
 					log.WithFields(logrus.Fields{"state": "GCP", "action": "get-cidr-range"}).Debugf("skipped %v from region %v", prefix.Ipv4Prefix, prefix.Scope)

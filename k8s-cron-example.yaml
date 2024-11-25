@@ -1,0 +1,122 @@
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: sslsearch-ctl-cron
+  namespace: sslsearch
+  labels:
+    app: sslsearch-ctl-cron
+spec:
+  schedule: "5 0 * * *"
+  timeZone: Asia/Kolkata
+  jobTemplate:
+    metadata:
+      labels:
+        app: sslsearch-ctl-cron
+    spec:
+      parallelism: 1
+      completions: 1
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app: sslsearch-ctl-cron
+        spec:
+          containers:
+            - name: sslsearch-ctl
+              imagePullPolicy: Always
+              image: ghcr.io/harshvaragiya/sslsearch:latest
+              env:
+                - name: REDIS_HOST
+                  value: 192.168.0.100:6379
+                - name: TZ
+                  value: 'Asia/Kolkata'
+              command:
+                [
+                  "/app/sslsearch",
+                  "worker",
+                  "add",
+                  "--suffix=12",
+                  "--target=aws,gcp,digital-ocean",
+                ]
+              resources:
+                limits:
+                  cpu: "0.5"
+                  memory: "200Mi"
+                requests:
+                  cpu: "0.1"
+                  memory: "50Mi"
+          restartPolicy: Never
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: sslsearch-scanner-cron
+  namespace: sslsearch
+  labels:
+    app: sslsearch-scanner-cron
+spec:
+  schedule: "5 0 * * *"
+  timeZone: Asia/Kolkata
+  jobTemplate:
+    metadata:
+      labels:
+        app: sslsearch-scanner-cron
+    spec:
+      activeDeadlineSeconds: 72000 # 20 Hours
+      parallelism: 12 # change as per your requirements
+      completions: 12
+      backoffLimit: 3
+      template:
+        metadata:
+          labels:
+            app: sslsearch-scanner-cron
+        spec:
+          containers:
+            - name: sslsearch-scanner
+              imagePullPolicy: Always
+              image: ghcr.io/harshvaragiya/sslsearch:latest
+              env:
+                - name: MINIO_ENDPOINT             # for dumping cpu & memory profiles export for debugging
+                  value: "192.168.0.100:9000"
+                - name: ACCESS_KEY                 # MinIO access key for cpu & memory profiles export for debugging
+                  value: ""
+                - name: SECRET_KEY                 # MinIO secret key for cpu & memory profiles export for debugging
+                  value: ""
+                - name: BUCKET_NAME                # MinIO bucket name for cpu & memory profiles export for debugging
+                  value: ""
+                - name: REDIS_HOST                 # for job queue access
+                  value: "192.168.0.100:6379"
+                - name: GOMEMLIMIT                 # try to reduce golang memory usage
+                  value: 1200MiB
+                - name: TZ
+                  value: 'Asia/Kolkata'
+              command:
+                [
+                  "/app/sslsearch",
+                  "worker",
+                  "process",                                             # background worker
+                  "--export.elastic",                                    # elasticsearch export
+                  "--export.elastic.username=elastic",                   # elasticsearch username
+                  "--export.elastic.password=elastic-password",          # elasticsearch password
+                  "--export.elastic.host=https://192.168.0.100:9200",    # modify this to elasticsearch host
+                  "--suffix=4",
+                  "--threads=4096",                                      # threads per pod
+                  "--refresh=300",
+                  "--server-header-threads=64",                          # modify to change channel pressure
+                  "--jarm-threads=256",                                  # modify to change channel pressure
+                  "--timeout=10"                                         # tcp socket timeout
+                ]
+              resources:
+                limits:                                # max container memory limit. 2x GoMemLimit. can be reduced
+                  cpu: "2"
+                  memory: "2840Mi"
+                requests:                              # recommended ~0.5vCPU, 500MB RAM
+                  cpu: "0.4"
+                  memory: "600Mi"
+          restartPolicy: Never
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1

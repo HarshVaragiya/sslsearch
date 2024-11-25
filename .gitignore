@@ -5,3 +5,9 @@ bin/
 output/
 regions/
 .obsidian
+sslsearch.prof
+.idea
+k8s/deployment.yaml
+profiles/
+k8s/job.yaml
+k8s/

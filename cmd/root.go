@@ -27,41 +27,65 @@ import (
 	"net"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/valyala/fasthttp"
 )
 
 var (
-	debugFlag              bool
-	traceFlag              bool
-	keywordRegexString     string
-	regionRegexString      string
-	portsString            string
-	outFileName            string
-	outputOverwrite        bool
+	debugFlag          bool
+	keywordRegexString string
+	regionRegexString  string
+	portsString        string
+
 	threadCount            int
 	cidrSuffixPerGoRoutine int
-	consoleOut             bool
 
-	grabServerHeader           bool
-	grabJarmFingerprint        bool
 	serverHeaderThreadCount    int
-	jarmFingerptintThreadCount int
+	jarmFingerprintThreadCount int
+
+	// Export Configuration
+	diskExport                  bool
+	diskFilePath                string
+	cassandraExport             bool
+	cassandraConnectionString   string
+	cassandraKeyspaceDotTable   string
+	cassandraRecordTimeStampKey string
+	elasticsearchExport         bool
+	elasticsearchHost           string
+	elasticsearchUsername       string
+	elasticsearchPassword       string
+	elasticsearchIndex          string
+	consoleProgressLog          bool
 )
 
 var (
-	log               = logrus.New()
-	statsLock         = sync.RWMutex{}
-	cidrRangesToScan  = 0
-	cidrRangesScanned = 0
-	totalIpsScanned   = 0
-	totalFindings     = 0
-	jarmRetryCount    = 3
-	tcpTimeout        = 10
-	consoleRefreshMs  = 1000
+	log                     = logrus.New()
+	cidrRangesToScan        = atomic.Int64{}
+	cidrRangesScanned       = atomic.Int64{}
+	ipsToScan               = atomic.Int64{}
+	ipsErrConn              = atomic.Int64{}
+	ipsErrNoTls             = atomic.Int64{}
+	ipsScanned              = atomic.Int64{}
+	ipScanRate              = atomic.Int64{}
+	totalFindings           = atomic.Int64{}
+	jarmFingerprintsGrabbed = atomic.Int64{}
+	jarmFingerprintsScanned = atomic.Int64{}
+	serverHeadersGrabbed    = atomic.Int64{}
+	serverHeadersScanned    = atomic.Int64{}
+	resultsExported         = atomic.Int64{}
+	resultsProcessed        = atomic.Int64{}
+	activeJarmThreads       = atomic.Int64{}
+	activeHeaderThreads     = atomic.Int64{}
+	jarmRetryCount          = 3
+	tcpTimeout              = 10
+	consoleRefreshSeconds   = 5
+
+	state = 1
 
 	httpClientPool = sync.Pool{
 		New: func() interface{} {
@@ -98,17 +122,10 @@ var rootCmd = &cobra.Command{
 	Use:   "sslsearch",
 	Short: "hunt for keywords in SSL certificates on cloud",
 	Long: `search cloud providers / IP ranges to scan for interesting keywords in
-SSL certificates. Do some initial recon for the findings if required. 
-Initial Recon: 
-	1. Server Header Grabbing
-	2. JARM Fingerprinting`,
-	// Uncomment the following line if your bare application
-	// has an action associated with it:
-	// Run: func(cmd *cobra.Command, args []string) { },
+SSL certificates and do some initial recon for the findings like server header grabbing
+& JARM Fingerprinting`,
 }
 
-// Execute adds all child commands to the root command and sets flags appropriately.
-// This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
 	err := rootCmd.Execute()
 	if err != nil {
@@ -117,42 +134,41 @@ func Execute() {
 }
 
 func init() {
-	// Here you will define your flags and configuration settings.
-	// Cobra supports persistent flags, which, if defined here,
-	// will be global for your application.
-
-	// rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.sslsearch.yaml)")
-
-	// Cobra also supports local flags, which will only run
-	// when this action is called directly.
-
 	// refined input flags
-	rootCmd.PersistentFlags().StringVarP(&keywordRegexString, "keyword-regex", "k", "", "case insensitive keyword regex to search in subject or SAN (ex: .*amazon.* or .* which matches all)")
-	rootCmd.MarkPersistentFlagRequired("keyword-regex")
-
+	viper.AutomaticEnv()
+	rootCmd.PersistentFlags().StringVarP(&keywordRegexString, "keyword-regex", "k", ".*", "case insensitive keyword regex to search in subject or SAN (ex: .*amazon.* or .* which matches all)")
 	rootCmd.PersistentFlags().StringVarP(&portsString, "ports", "p", "443", "ports to search")
-	rootCmd.PersistentFlags().StringVarP(&outFileName, "output", "o", "output.log", "output file on disk")
-	rootCmd.PersistentFlags().BoolVar(&outputOverwrite, "overwrite", false, "overwrite output file if it exists")
-	rootCmd.PersistentFlags().IntVarP(&threadCount, "threads", "t", 1000, "number of parallel threads to use")
-	rootCmd.PersistentFlags().IntVar(&consoleRefreshMs, "refresh", 1000, "console progress refresh ms")
-
-	// advanced input flags
+	rootCmd.PersistentFlags().IntVarP(&threadCount, "threads", "t", 1024, "number of parallel threads to use")
+	rootCmd.PersistentFlags().IntVar(&consoleRefreshSeconds, "refresh", 5, "console progress refresh in seconds")
+	rootCmd.PersistentFlags().BoolVarP(&debugFlag, "debug", "v", false, "enable debug logs")
 	rootCmd.PersistentFlags().IntVar(&cidrSuffixPerGoRoutine, "suffix", 4, "CIDR suffix per goroutine [each thread will scan 2^x IPs]")
 	rootCmd.PersistentFlags().IntVar(&tcpTimeout, "timeout", 10, "tcp connection timeout in seconds")
-	rootCmd.PersistentFlags().BoolVar(&consoleOut, "console-out", false, "actively print result JSON to console")
+	rootCmd.PersistentFlags().BoolVar(&consoleProgressLog, "console-progress", false, "print progress notes in console instead of progress bar")
+
+	// Export to disk
+	rootCmd.PersistentFlags().BoolVar(&diskExport, "export.disk", false, "export findings to disk")
+	rootCmd.PersistentFlags().StringVarP(&diskFilePath, "export.disk.filename", "o", "", "output file name on disk")
+	rootCmd.MarkFlagsRequiredTogether("export.disk", "export.disk.filename")
+
+	// Export to cassandra
+	rootCmd.PersistentFlags().BoolVar(&cassandraExport, "export.cassandra", false, "export findings to cassandra")
+	rootCmd.PersistentFlags().StringVar(&cassandraConnectionString, "export.cassandra.connection-string", "", "cassandra connection string")
+	rootCmd.PersistentFlags().StringVar(&cassandraKeyspaceDotTable, "export.cassandra.table", "recon.sslsearch", "cassandra keyspace.table name to store data")
+	rootCmd.PersistentFlags().StringVar(&cassandraRecordTimeStampKey, "export.cassandra.result-ts-key", "", "cassandra default result timestamp key (defaults to YYYY-MM-DD)")
+	rootCmd.MarkFlagsRequiredTogether("export.cassandra", "export.cassandra.connection-string")
+
+	// Export to elasticsearch
+	rootCmd.PersistentFlags().BoolVar(&elasticsearchExport, "export.elastic", false, "export findings to elasticsearch")
+	rootCmd.PersistentFlags().StringVar(&elasticsearchHost, "export.elastic.host", "", "elasticsearch host where data will be sent")
+	rootCmd.PersistentFlags().StringVar(&elasticsearchUsername, "export.elastic.username", "", "elasticsearch username for authentication")
+	rootCmd.PersistentFlags().StringVar(&elasticsearchPassword, "export.elastic.password", "", "elasticsearch password for authentication")
+	rootCmd.PersistentFlags().StringVar(&elasticsearchIndex, "export.elastic.index", "", "elasticsearch index where data will be stored (default: sslsearch-YYYY-MM-DD)")
+	rootCmd.MarkFlagsRequiredTogether("export.elastic", "export.elastic.host", "export.elastic.username", "export.elastic.password")
+
+	rootCmd.MarkFlagsMutuallyExclusive("export.disk", "export.elastic", "export.cassandra")
 
 	// Recon flags
-	// Server Header enumeration
-	rootCmd.PersistentFlags().BoolVar(&grabServerHeader, "server-header", false, "attempt to enrich results by grabbing the https server header for results")
-	rootCmd.PersistentFlags().IntVar(&serverHeaderThreadCount, "server-header-threads", 40, "number of threads to use for server header result enrichment")
-
-	// JARM fingerprinting
-	rootCmd.PersistentFlags().BoolVar(&grabJarmFingerprint, "jarm", false, "attempt to enrich results by grabbing the JARM fingerprint")
+	rootCmd.PersistentFlags().IntVar(&serverHeaderThreadCount, "server-header-threads", 16, "number of threads to use for server header result enrichment")
 	rootCmd.PersistentFlags().IntVar(&jarmRetryCount, "jarm-retry-count", 3, "retry attempts for JARM fingerprint")
-	rootCmd.PersistentFlags().IntVar(&jarmFingerptintThreadCount, "jarm-threads", 40, "number of threads to use for JARM fingerprint enrichment (>200 might not be stable)")
-
-	// debugging
-	rootCmd.PersistentFlags().BoolVarP(&debugFlag, "debug", "v", false, "enable debug logs")
-	rootCmd.PersistentFlags().BoolVar(&traceFlag, "trace", false, "enable trace logs")
-
+	rootCmd.PersistentFlags().IntVar(&jarmFingerprintThreadCount, "jarm-threads", 64, "number of threads to use for JARM fingerprint enrichment")
 }
