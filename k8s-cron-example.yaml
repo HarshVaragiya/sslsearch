@@ -25,7 +25,7 @@ spec:
           containers:
             - name: sslsearch-ctl
               imagePullPolicy: Always
-              image: <registry>/sslsearch
+              image: ghcr.io/harshvaragiya/sslsearch:latest
               env:
                 - name: REDIS_HOST
                   value: 192.168.0.100:6379
@@ -78,7 +78,7 @@ spec:
           containers:
             - name: sslsearch-scanner
               imagePullPolicy: Always
-              image: <registry>/sslsearch
+              image: ghcr.io/harshvaragiya/sslsearch:latest
               env:
                 - name: MINIO_ENDPOINT             # for dumping cpu & memory profiles export for debugging
                   value: "192.168.0.100:9000"
