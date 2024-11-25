@@ -155,7 +155,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&cassandraConnectionString, "export.cassandra.connection-string", "", "cassandra connection string")
 	rootCmd.PersistentFlags().StringVar(&cassandraKeyspaceDotTable, "export.cassandra.table", "recon.sslsearch", "cassandra keyspace.table name to store data")
 	rootCmd.PersistentFlags().StringVar(&cassandraRecordTimeStampKey, "export.cassandra.result-ts-key", "", "cassandra default result timestamp key (defaults to YYYY-MM-DD)")
-	//rootCmd.MarkFlagsRequiredTogether("export.cassandra", "export.cassandra.connection-string")
+	rootCmd.MarkFlagsRequiredTogether("export.cassandra", "export.cassandra.connection-string")
 
 	// Export to elasticsearch
 	rootCmd.PersistentFlags().BoolVar(&elasticsearchExport, "export.elastic", false, "export findings to elasticsearch")
@@ -163,7 +163,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&elasticsearchUsername, "export.elastic.username", "", "elasticsearch username for authentication")
 	rootCmd.PersistentFlags().StringVar(&elasticsearchPassword, "export.elastic.password", "", "elasticsearch password for authentication")
 	rootCmd.PersistentFlags().StringVar(&elasticsearchIndex, "export.elastic.index", "", "elasticsearch index where data will be stored (default: sslsearch-YYYY-MM-DD)")
-	//rootCmd.MarkFlagsRequiredTogether("export.elastic", "export.elastic.host", "export.elastic.username", "export.elastic.password")
+	rootCmd.MarkFlagsRequiredTogether("export.elastic", "export.elastic.host", "export.elastic.username", "export.elastic.password")
 
 	rootCmd.MarkFlagsMutuallyExclusive("export.disk", "export.elastic", "export.cassandra")
 
